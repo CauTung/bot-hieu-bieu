@@ -38,35 +38,35 @@ class GeminiIntentRouter:
         input_text = f"Thời gian hiện tại: {now.isoformat()} ({timezone_name})\nTin nhắn: {text}"
 
         try:
-            intent_schema = types.Schema(
-                type="OBJECT",
-                properties={
-                    "intent": types.Schema(
-                        type="STRING",
-                        enum=["create_sku", "lookup_sku", "add_order", "query_orders", "create_reminder", "list_reminders", "cancel_reminder", "qa", "unknown"]
-                    ),
-                    "params": types.Schema(
-                        type="OBJECT",
-                        properties={
-                            "sku": types.Schema(type="STRING", nullable=True),
-                            "name": types.Schema(type="STRING", nullable=True),
-                            "tags": types.Schema(type="ARRAY", items=types.Schema(type="STRING"), nullable=True),
-                            "notes": types.Schema(type="STRING", nullable=True),
-                            "quantity": types.Schema(type="INTEGER", nullable=True),
-                            "order_date": types.Schema(type="STRING", nullable=True),
-                            "source": types.Schema(type="STRING", nullable=True),
-                            "period": types.Schema(type="STRING", nullable=True),
-                            "content": types.Schema(type="STRING", nullable=True),
-                            "remind_at": types.Schema(type="STRING", nullable=True),
-                            "reminder_id": types.Schema(type="STRING", nullable=True),
-                            "question": types.Schema(type="STRING", nullable=True),
+            intent_schema = {
+                "type": "OBJECT",
+                "properties": {
+                    "intent": {
+                        "type": "STRING",
+                        "enum": ["create_sku", "lookup_sku", "add_order", "query_orders", "create_reminder", "list_reminders", "cancel_reminder", "qa", "unknown"]
+                    },
+                    "params": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "sku": {"type": "STRING", "nullable": True},
+                            "name": {"type": "STRING", "nullable": True},
+                            "tags": {"type": "ARRAY", "items": {"type": "STRING"}, "nullable": True},
+                            "notes": {"type": "STRING", "nullable": True},
+                            "quantity": {"type": "INTEGER", "nullable": True},
+                            "order_date": {"type": "STRING", "nullable": True},
+                            "source": {"type": "STRING", "nullable": True},
+                            "period": {"type": "STRING", "nullable": True},
+                            "content": {"type": "STRING", "nullable": True},
+                            "remind_at": {"type": "STRING", "nullable": True},
+                            "reminder_id": {"type": "STRING", "nullable": True},
+                            "question": {"type": "STRING", "nullable": True},
                         }
-                    ),
-                    "confidence": types.Schema(type="NUMBER"),
-                    "clarification_question": types.Schema(type="STRING", nullable=True),
+                    },
+                    "confidence": {"type": "NUMBER"},
+                    "clarification_question": {"type": "STRING", "nullable": True},
                 },
-                required=["intent", "params", "confidence"]
-            )
+                "required": ["intent", "params", "confidence"]
+            }
             response = self._client.models.generate_content(
                 model=self._model,
                 contents=input_text,
