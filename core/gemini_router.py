@@ -59,7 +59,7 @@ class GeminiIntentRouter:
         except Exception as exc:
             if isinstance(exc, RouterError):
                 raise
-            raise RouterError("Gemini request failed") from exc
+            raise RouterError(f"Gemini request failed: {str(exc)}") from exc
 
     @staticmethod
     def _safety_identifier(telegram_user_id: int) -> str:

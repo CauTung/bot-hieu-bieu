@@ -85,7 +85,11 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
         log_event("update_completed", update_id=context.update_id)
         return Response(status_code=200, content=json.dumps({"ok": True}), media_type="application/json")
     except Exception as exc:
-        log_event("update_failed", update_id=context.update_id, error=type(exc).__name__)
+        import traceback
+        err_msg = type(exc).__name__
+        if str(exc):
+            err_msg += f": {str(exc)}"
+        log_event("update_failed", update_id=context.update_id, error=err_msg, traceback=traceback.format_exc())
         return Response(status_code=500, content=json.dumps({"ok": False, "error": "Temporary processing error"}), media_type="application/json")
 
 @app.api_route("/api/check-reminders", methods=["GET", "POST"])
