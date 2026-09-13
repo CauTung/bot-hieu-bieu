@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, String, Text, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.base import Base
@@ -8,6 +8,12 @@ from models.base import Base
 
 class ProcessedUpdate(Base):
     __tablename__ = "processed_updates"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('processing', 'completed', 'failed')",
+            name="ck_processed_updates_status",
+        ),
+    )
 
     update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     status: Mapped[str] = mapped_column(

@@ -2,9 +2,17 @@
 
 Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webhook/serverless: bảo mật từ đầu, chống xử lý trùng và có retry đáng tin cậy.
 
+## Trạng thái triển khai
+
+- Đã code local: schema/migration, webhook security, allowlist, deduplicate update, OpenAI router,
+  confirmation state, SKU, order, reminder worker, QA và test tự động.
+- Đã chọn Supabase nhưng chưa chạy migration/integration test trên database thật.
+- Chưa production-verified vì chưa có Supabase URL, Telegram token và OpenAI key.
+- Các giai đoạn bên dưới chỉ được đánh dấu hoàn tất sau khi tiêu chí production tương ứng pass.
+
 ## 1. Quyết định phải chốt trước khi code
 
-1. Chọn PostgreSQL provider: Neon hoặc Supabase; bật connection pooling cho serverless.
+1. PostgreSQL provider đã chọn: **Supabase**; dùng connection pooling cho serverless.
 2. Chốt `TELEGRAM_ALLOWED_USER_IDS` và các chat được phép sử dụng.
 3. Chọn cron ngoài có thể chạy mỗi 1–5 phút và gửi Authorization header.
 4. Chọn model OpenAI hiện hành theo structured output, latency và chi phí; model ID nằm trong environment variable, không hardcode.

@@ -175,7 +175,7 @@ pending -> processing -> sent
 ## 9. Stack
 
 - Python serverless functions trong `/api`.
-- SQLAlchemy + Alembic + PostgreSQL serverless (Neon hoặc Supabase phải được chọn trước khi triển khai).
+- SQLAlchemy + Alembic + Supabase PostgreSQL qua connection pooler cho serverless.
 - `httpx` với timeout rõ ràng cho Telegram và OpenAI API.
 - OpenAI API Structured Outputs cho router; lời gọi riêng cho QA.
 - `pytest` cho unit/integration tests.

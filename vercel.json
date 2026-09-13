@@ -4,6 +4,11 @@
     "api/*.py": {
       "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/check-reminders",
+      "destination": "/api/check_reminders"
+    }
+  ]
 }
-

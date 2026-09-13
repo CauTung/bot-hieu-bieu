@@ -8,9 +8,9 @@ def base_environment() -> dict[str, str]:
         "TELEGRAM_WEBHOOK_SECRET": "a-secure-webhook-secret",
         "TELEGRAM_ALLOWED_USER_IDS": "123, 456",
         "REMINDER_CRON_SECRET": "a-secure-reminder-secret",
-        "OPENAI_API_KEY": "key",
-        "OPENAI_ROUTER_MODEL": "router-model",
-        "OPENAI_QA_MODEL": "qa-model",
+        "GEMINI_API_KEY": "key",
+        "GEMINI_ROUTER_MODEL": "router-model",
+        "GEMINI_QA_MODEL": "qa-model",
     }
 
 
@@ -33,3 +33,10 @@ def test_settings_parse_single_user_id_from_environment(monkeypatch: object) -> 
     finally:
         for key in environment:
             os.environ.pop(key, None)
+
+
+def test_supabase_postgres_url_uses_psycopg_driver() -> None:
+    environment = base_environment()
+    environment["DATABASE_URL"] = "postgresql://user:pass@pooler.supabase.test/db"
+    settings = Settings(**environment)  # type: ignore[arg-type]
+    assert settings.database_url.startswith("postgresql+psycopg://")

@@ -7,13 +7,15 @@ from pydantic import ValidationError
 from core.config import get_settings
 from core.db import session_scope
 from core.logging import log_event
+from core.gemini_qa import GeminiQAClient
+from core.gemini_router import GeminiIntentRouter
 from core.security import is_allowed_user, secrets_match
 from core.telegram_client import TelegramClient
+from services.bot_service import BotService
 from services.update_processor import (
     claim_update,
     complete_update,
     parse_update,
-    process_placeholder_update,
 )
 
 MAX_BODY_BYTES = 256_000
@@ -55,8 +57,13 @@ class handler(BaseHTTPRequestHandler):
             return
 
         if not is_allowed_user(context.user_id, settings.telegram_allowed_user_ids):
+            if context.user_id is None:
+                self._json_response(200, {"ok": True, "ignored": True})
+                return
             log_event("unauthorized_user", update_id=context.update_id, user_id=context.user_id)
-            self._json_response(403, {"ok": False, "error": "Forbidden"})
+            # Telegram retries non-2xx webhook responses. A valid update from a user
+            # outside the private allowlist is intentionally ignored with HTTP 200.
+            self._json_response(200, {"ok": True, "ignored": True})
             return
 
         try:
@@ -65,7 +72,19 @@ class handler(BaseHTTPRequestHandler):
                     self._json_response(200, {"ok": True, "duplicate": True})
                     return
                 telegram = TelegramClient(settings.telegram_bot_token)
-                process_placeholder_update(context, telegram)
+                service = BotService(
+                    session=session,
+                    telegram=telegram,
+                    router=GeminiIntentRouter(
+                        settings.gemini_api_key, settings.gemini_router_model
+                    ),
+                    qa=GeminiQAClient(settings.gemini_api_key, settings.gemini_qa_model),
+                    timezone_name=settings.app_timezone,
+                    confidence_threshold=settings.intent_confidence_threshold,
+                    action_ttl_minutes=settings.pending_action_ttl_minutes,
+                    max_message_length=settings.max_message_length,
+                )
+                service.process(context)
                 complete_update(session, context.update_id)
             log_event("update_completed", update_id=context.update_id)
             self._json_response(200, {"ok": True})

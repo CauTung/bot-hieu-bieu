@@ -1,17 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.processed_update import ProcessedUpdate
-
-
-class TelegramPort(Protocol):
-    def send_message(self, chat_id: int, text: str, **extra: Any) -> dict[str, Any]: ...
-
-    def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -21,6 +15,8 @@ class UpdateContext:
     chat_id: int | None
     text: str | None
     callback_query_id: str | None
+    callback_data: str | None
+    message_id: int | None
 
 
 def parse_update(payload: dict[str, Any]) -> UpdateContext:
@@ -38,6 +34,10 @@ def parse_update(payload: dict[str, Any]) -> UpdateContext:
             chat_id=chat.get("id") if isinstance(chat, dict) else None,
             text=message.get("text") if isinstance(message.get("text"), str) else None,
             callback_query_id=None,
+            callback_data=None,
+            message_id=message.get("message_id")
+            if isinstance(message.get("message_id"), int)
+            else None,
         )
 
     callback = payload.get("callback_query")
@@ -51,9 +51,16 @@ def parse_update(payload: dict[str, Any]) -> UpdateContext:
             chat_id=chat.get("id") if isinstance(chat, dict) else None,
             text=None,
             callback_query_id=callback.get("id") if isinstance(callback.get("id"), str) else None,
+            callback_data=callback.get("data") if isinstance(callback.get("data"), str) else None,
+            message_id=(
+                callback_message.get("message_id")
+                if isinstance(callback_message, dict)
+                and isinstance(callback_message.get("message_id"), int)
+                else None
+            ),
         )
 
-    return UpdateContext(update_id, None, None, None, None)
+    return UpdateContext(update_id, None, None, None, None, None, None)
 
 
 def claim_update(session: Session, update_id: int) -> bool:
@@ -72,16 +79,3 @@ def complete_update(session: Session, update_id: int) -> None:
         raise RuntimeError("Claimed update no longer exists")
     update.status = "completed"
     update.processed_at = datetime.now(timezone.utc)
-
-
-def process_placeholder_update(context: UpdateContext, telegram: TelegramPort) -> None:
-    if context.callback_query_id:
-        telegram.answer_callback_query(
-            context.callback_query_id, "Tính năng xác nhận đang được hoàn thiện."
-        )
-        return
-    if context.chat_id is not None and context.text:
-        telegram.send_message(
-            context.chat_id,
-            "Bot đã kết nối an toàn. Bộ phân tích yêu cầu đang được triển khai.",
-        )

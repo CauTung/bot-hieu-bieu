@@ -24,6 +24,12 @@ class TelegramClient:
             payload["text"] = text
         self._post("answerCallbackQuery", payload)
 
+    def edit_message_reply_markup(self, chat_id: int, message_id: int) -> None:
+        self._post(
+            "editMessageReplyMarkup",
+            {"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
+        )
+
     def _post(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             response = httpx.post(f"{self._base_url}/{method}", json=payload, timeout=self._timeout)
