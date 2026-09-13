@@ -39,31 +39,31 @@ class GeminiIntentRouter:
 
         try:
             intent_schema = types.Schema(
-                type=types.Type.OBJECT,
+                type="OBJECT",
                 properties={
                     "intent": types.Schema(
-                        type=types.Type.STRING,
+                        type="STRING",
                         enum=["create_sku", "lookup_sku", "add_order", "query_orders", "create_reminder", "list_reminders", "cancel_reminder", "qa", "unknown"]
                     ),
                     "params": types.Schema(
-                        type=types.Type.OBJECT,
+                        type="OBJECT",
                         properties={
-                            "sku": types.Schema(type=types.Type.STRING, nullable=True),
-                            "name": types.Schema(type=types.Type.STRING, nullable=True),
-                            "tags": types.Schema(type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING), nullable=True),
-                            "notes": types.Schema(type=types.Type.STRING, nullable=True),
-                            "quantity": types.Schema(type=types.Type.INTEGER, nullable=True),
-                            "order_date": types.Schema(type=types.Type.STRING, nullable=True),
-                            "source": types.Schema(type=types.Type.STRING, nullable=True),
-                            "period": types.Schema(type=types.Type.STRING, nullable=True),
-                            "content": types.Schema(type=types.Type.STRING, nullable=True),
-                            "remind_at": types.Schema(type=types.Type.STRING, nullable=True),
-                            "reminder_id": types.Schema(type=types.Type.STRING, nullable=True),
-                            "question": types.Schema(type=types.Type.STRING, nullable=True),
+                            "sku": types.Schema(type="STRING", nullable=True),
+                            "name": types.Schema(type="STRING", nullable=True),
+                            "tags": types.Schema(type="ARRAY", items=types.Schema(type="STRING"), nullable=True),
+                            "notes": types.Schema(type="STRING", nullable=True),
+                            "quantity": types.Schema(type="INTEGER", nullable=True),
+                            "order_date": types.Schema(type="STRING", nullable=True),
+                            "source": types.Schema(type="STRING", nullable=True),
+                            "period": types.Schema(type="STRING", nullable=True),
+                            "content": types.Schema(type="STRING", nullable=True),
+                            "remind_at": types.Schema(type="STRING", nullable=True),
+                            "reminder_id": types.Schema(type="STRING", nullable=True),
+                            "question": types.Schema(type="STRING", nullable=True),
                         }
                     ),
-                    "confidence": types.Schema(type=types.Type.NUMBER),
-                    "clarification_question": types.Schema(type=types.Type.STRING, nullable=True),
+                    "confidence": types.Schema(type="NUMBER"),
+                    "clarification_question": types.Schema(type="STRING", nullable=True),
                 },
                 required=["intent", "params", "confidence"]
             )
