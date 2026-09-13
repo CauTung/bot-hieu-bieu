@@ -38,13 +38,42 @@ class GeminiIntentRouter:
         input_text = f"Thời gian hiện tại: {now.isoformat()} ({timezone_name})\nTin nhắn: {text}"
 
         try:
+            intent_schema = types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "intent": types.Schema(
+                        type=types.Type.STRING,
+                        enum=["create_sku", "lookup_sku", "add_order", "query_orders", "create_reminder", "list_reminders", "cancel_reminder", "qa", "unknown"]
+                    ),
+                    "params": types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "sku": types.Schema(type=types.Type.STRING, nullable=True),
+                            "name": types.Schema(type=types.Type.STRING, nullable=True),
+                            "tags": types.Schema(type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING), nullable=True),
+                            "notes": types.Schema(type=types.Type.STRING, nullable=True),
+                            "quantity": types.Schema(type=types.Type.INTEGER, nullable=True),
+                            "order_date": types.Schema(type=types.Type.STRING, nullable=True),
+                            "source": types.Schema(type=types.Type.STRING, nullable=True),
+                            "period": types.Schema(type=types.Type.STRING, nullable=True),
+                            "content": types.Schema(type=types.Type.STRING, nullable=True),
+                            "remind_at": types.Schema(type=types.Type.STRING, nullable=True),
+                            "reminder_id": types.Schema(type=types.Type.STRING, nullable=True),
+                            "question": types.Schema(type=types.Type.STRING, nullable=True),
+                        }
+                    ),
+                    "confidence": types.Schema(type=types.Type.NUMBER),
+                    "clarification_question": types.Schema(type=types.Type.STRING, nullable=True),
+                },
+                required=["intent", "params", "confidence"]
+            )
             response = self._client.models.generate_content(
                 model=self._model,
                 contents=input_text,
                 config=types.GenerateContentConfig(
                     system_instruction=ROUTER_INSTRUCTIONS,
                     response_mime_type="application/json",
-                    response_schema=IntentDecision,
+                    response_schema=intent_schema,
                     max_output_tokens=500,
                     temperature=0.0,
                 )
