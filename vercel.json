@@ -2,19 +2,14 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "builds": [
     {
-      "src": "api/*.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
-  "functions": {
-    "api/*.py": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/check-reminders",
-      "destination": "/api/check_reminders"
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
     }
   ]
 }
