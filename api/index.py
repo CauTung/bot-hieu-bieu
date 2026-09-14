@@ -1,25 +1,26 @@
 import json
 from typing import Any
 
-from fastapi import FastAPI, Request, Response, Header
+from fastapi import FastAPI, Header, Request, Response
 from pydantic import ValidationError
 
 from core.config import get_settings
 from core.db import session_scope
-from core.logging import log_event
 from core.gemini_router import GeminiIntentRouter
+from core.logging import log_event
 from core.security import is_allowed_user, secrets_match
 from core.telegram_client import TelegramClient
 from services.bot_service import BotService
-from services.update_processor import (
-    claim_update,
-    complete_update,
-    parse_update,
-)
+from services.reminder_presenter import format_notification
 from services.reminder_worker import (
     claim_due_reminders,
     mark_reminder_error,
     mark_reminder_sent,
+)
+from services.update_processor import (
+    claim_update,
+    complete_update,
+    parse_update,
 )
 
 app = FastAPI()
@@ -121,7 +122,10 @@ async def check_reminders(request: Request, authorization: str = Header(None)) -
     sent = retried = failed = 0
     for reminder in reminders:
         try:
-            telegram.send_message(reminder.chat_id, f"⏰ Nhắc việc: {reminder.content}")
+            telegram.send_message(
+                reminder.chat_id,
+                format_notification(reminder, settings.app_timezone),
+            )
             with session_scope() as session:
                 mark_reminder_sent(session, reminder)
             sent += 1

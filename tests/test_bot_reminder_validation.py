@@ -71,7 +71,8 @@ def test_event_time_defaults_to_reminder_two_hours_early(
     remind_at = datetime.fromisoformat(payload["remind_at"])
     assert remind_at == event_at - timedelta(hours=2)
     assert payload["event_at"] == event_at.isoformat()
-    assert "bot sẽ nhắc" in telegram.messages[0][1]
+    assert "XÁC NHẬN LỊCH HẸN" in telegram.messages[0][1]
+    assert "trước 2 giờ" in telegram.messages[0][1]
 
 
 def test_explicit_relative_reminder_is_not_shifted(monkeypatch) -> None:

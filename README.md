@@ -37,6 +37,8 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
   thể được cung cấp qua nhiều tin nhắn liên tiếp.
 - Reminder tách giờ sự kiện và giờ gửi nhắc. Câu `18h ngày 17/9 đi nhậu` mặc định nhắc lúc 16h
   (trước 2 giờ); câu `2 tiếng nữa nhắc tôi...` gửi nhắc đúng sau 2 giờ và không bị trừ thêm.
+- Tin xác nhận, kết quả, danh sách và thông báo reminder dùng định dạng thẻ dễ quét: tiêu đề,
+  nội dung, thứ/ngày, giờ sự kiện và giờ nhắc; timestamp ISO chỉ dùng nội bộ.
 - Lịch sử trao đổi hoàn tất được giữ 30 ngày. Bot chỉ gửi tối đa 8 lượt gần nhất đã giới hạn độ dài
   cho Gemini, đủ hiểu “cái vừa rồi” nhưng không làm token tăng theo toàn bộ lịch sử.
 - Bot gửi trạng thái Telegram `typing` khi xử lý; lỗi/quota Gemini trả thông báo thay vì im lặng.

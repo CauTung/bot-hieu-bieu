@@ -113,6 +113,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Implement create/list/cancel qua confirmation flow.
 - Tách giờ sự kiện (`event_at`) và giờ gửi nhắc (`remind_at`); mặc định nhắc trước sự kiện 2 giờ,
   nhưng giữ nguyên thời điểm khi người dùng yêu cầu nhắc tương đối hoặc nêu giờ nhắc cụ thể.
+- Trình bày reminder theo thẻ Telegram dễ quét, không lộ ISO timestamp; UUID hủy được đặt ở dòng
+  phụ thay vì trộn vào nội dung chính.
 - Implement `/api/check-reminders`:
   - Yêu cầu Authorization secret riêng.
   - Claim batch bằng transaction và row locking/`SKIP LOCKED`.

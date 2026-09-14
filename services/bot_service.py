@@ -27,6 +27,7 @@ from services.conversation_service import (
     save_conversation_state,
 )
 from services.date_ranges import parse_order_period
+from services.reminder_presenter import format_confirmation, format_created, format_list
 from services.update_processor import UpdateContext
 
 
@@ -471,14 +472,7 @@ class BotService:
                     else None
                 ),
             )
-            local_time = reminder.remind_at.astimezone(ZoneInfo(self.timezone_name))
-            if reminder.event_at is not None:
-                event_time = reminder.event_at.astimezone(ZoneInfo(self.timezone_name))
-                return (
-                    f"Đã đặt nhắc lúc {local_time:%H:%M %d/%m/%Y} cho sự kiện "
-                    f"lúc {event_time:%H:%M %d/%m/%Y}: {reminder.content}"
-                )
-            return f"Đã đặt nhắc lúc {local_time:%H:%M %d/%m/%Y}: {reminder.content}"
+            return format_created(reminder, self.timezone_name)
         if action_type == Intent.CANCEL_REMINDER.value:
             cancelled = cancel_reminder(
                 self.session,
@@ -537,19 +531,7 @@ class BotService:
             if not reminders:
                 self._send_and_record(context, "Bạn không có nhắc việc đang chờ.", decision)
                 return
-            zone = ZoneInfo(self.timezone_name)
-            lines = []
-            for item in reminders:
-                remind_time = item.remind_at.astimezone(zone)
-                event_suffix = ""
-                if item.event_at is not None:
-                    event_time = item.event_at.astimezone(zone)
-                    event_suffix = f" (sự kiện {event_time:%H:%M %d/%m/%Y})"
-                lines.append(
-                    f"• {item.id} — nhắc {remind_time:%H:%M %d/%m/%Y}{event_suffix}: "
-                    f"{item.content}"
-                )
-            text = "\n".join(lines)
+            text = format_list(reminders, self.timezone_name)
             self._send_and_record(context, text, decision)
         elif decision.intent == Intent.QA and params.question:
             answer = decision.answer or "Mình chưa có câu trả lời."
@@ -735,8 +717,7 @@ class BotService:
         )
         return match.group(1).upper() if match else None
 
-    @staticmethod
-    def _confirmation_summary(decision: IntentDecision) -> str:
+    def _confirmation_summary(self, decision: IntentDecision) -> str:
         params = decision.params
         if decision.intent == Intent.CREATE_SKU:
             return f"Tạo SKU {params.sku} cho mẫu '{params.name}'?"
@@ -761,12 +742,13 @@ class BotService:
         if decision.intent == Intent.DELETE_ORDER:
             return f"Xóa order {params.order_id}? Thao tác này không thể hoàn tác."
         if decision.intent == Intent.CREATE_REMINDER:
-            if params.event_at:
-                return (
-                    f"Sự kiện lúc {params.event_at}; bot sẽ nhắc lúc {params.remind_at}: "
-                    f"{params.content}?"
-                )
-            return f"Đặt nhắc lúc {params.remind_at}: {params.content}?"
+            assert params.content is not None and params.remind_at is not None
+            return format_confirmation(
+                content=params.content,
+                remind_at=datetime.fromisoformat(params.remind_at),
+                event_at=datetime.fromisoformat(params.event_at) if params.event_at else None,
+                timezone_name=self.timezone_name,
+            )
         if decision.intent == Intent.CANCEL_REMINDER:
             return f"Hủy nhắc việc {params.reminder_id}?"
         raise ValueError("Intent không cần xác nhận")
