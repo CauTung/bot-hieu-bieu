@@ -48,6 +48,8 @@ LLM router dùng Structured Outputs và trả về:
   tiếp theo phải được ghép vào trạng thái này thay vì phân loại như một yêu cầu độc lập.
 - Trạng thái làm rõ hết hạn sau thời gian cấu hình (mặc định 30 phút), được xóa khi yêu cầu hoàn
   chỉnh hoặc khi người dùng chuyển sang một lệnh rõ ràng khác.
+- Lưu tối đa 30 ngày lịch sử trao đổi đã hoàn tất theo từng user/chat. Mỗi request chỉ gửi tối đa
+  8 lượt gần nhất với độ dài bị giới hạn; không gửi toàn bộ lịch sử để kiểm soát token và quota.
 - “Hôm nay”, “tháng này”, “thứ hai” được hiểu theo `Asia/Ho_Chi_Minh`.
 - Nếu giờ không kèm ngày đã trôi qua, hỏi lại “hôm nay hay ngày mai”.
 - Input ngày mơ hồ như `01/02` phải hỏi lại nếu không xác định chắc định dạng.
@@ -145,6 +147,25 @@ pending_actions
 - expires_at TIMESTAMPTZ NOT NULL
 - created_at TIMESTAMPTZ NOT NULL
 - confirmed_at TIMESTAMPTZ NULL
+
+conversation_states
+- telegram_user_id BIGINT PK
+- chat_id BIGINT PK
+- intent TEXT NOT NULL
+- params JSONB NOT NULL
+- clarification_question TEXT NOT NULL
+- expires_at TIMESTAMPTZ NOT NULL
+
+conversation_exchanges
+- id UUID PK
+- telegram_user_id BIGINT NOT NULL
+- chat_id BIGINT NOT NULL
+- user_text TEXT NOT NULL
+- assistant_text TEXT NOT NULL
+- intent TEXT NULL
+- details JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL
+- expires_at TIMESTAMPTZ NOT NULL
 
 processed_updates
 - update_id BIGINT PK

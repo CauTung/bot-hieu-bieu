@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     app_timezone: str = Field(default="Asia/Ho_Chi_Minh", alias="APP_TIMEZONE")
     pending_action_ttl_minutes: int = Field(default=15, ge=1, le=1440)
     conversation_state_ttl_minutes: int = Field(default=30, ge=1, le=1440)
+    conversation_history_retention_days: int = Field(default=30, ge=1, le=365)
+    conversation_history_max_exchanges: int = Field(default=8, ge=1, le=20)
     reminder_max_attempts: int = Field(default=5, ge=1, le=20)
     reminder_lock_timeout_seconds: int = Field(default=120, ge=30, le=3600)
     intent_confidence_threshold: float = Field(default=0.8, ge=0, le=1)

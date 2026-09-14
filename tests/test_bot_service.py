@@ -76,6 +76,8 @@ def make_service(decision: IntentDecision) -> tuple[BotService, FakeTelegram]:
         confidence_threshold=0.8,
         action_ttl_minutes=15,
         conversation_ttl_minutes=30,
+        history_retention_days=30,
+        history_max_exchanges=8,
         max_message_length=4000,
     )
     return service, telegram
@@ -267,5 +269,6 @@ def test_followup_includes_saved_context(monkeypatch: pytest.MonkeyPatch) -> Non
     router = service.router
     assert isinstance(router, FakeRouter)
     context = router.calls[0]["conversation_context"]
-    assert context["intent"] == "create_reminder"
-    assert context["params"]["content"] == "Lịch đi nhậu"
+    pending = context["pending_request"]
+    assert pending["intent"] == "create_reminder"
+    assert pending["params"]["content"] == "Lịch đi nhậu"

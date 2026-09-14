@@ -26,6 +26,8 @@ def test_past_reminder_is_not_sent_to_confirmation() -> None:
         confidence_threshold=0.8,
         action_ttl_minutes=15,
         conversation_ttl_minutes=30,
+        history_retention_days=30,
+        history_max_exchanges=8,
         max_message_length=4000,
     )
     service.process(UpdateContext(1, 123, 456, "nhắc tôi", None, None, 10))

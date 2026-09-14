@@ -35,6 +35,8 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 - QA được trả lời trong cùng request phân loại intent, không gọi AI lần thứ hai.
 - Các câu trả lời làm rõ được nhớ theo từng user/chat trong 30 phút, nên nội dung và thời gian có
   thể được cung cấp qua nhiều tin nhắn liên tiếp.
+- Lịch sử trao đổi hoàn tất được giữ 30 ngày. Bot chỉ gửi tối đa 8 lượt gần nhất đã giới hạn độ dài
+  cho Gemini, đủ hiểu “cái vừa rồi” nhưng không làm token tăng theo toàn bộ lịch sử.
 - Bot gửi trạng thái Telegram `typing` khi xử lý; lỗi/quota Gemini trả thông báo thay vì im lặng.
 - SKU, order, pending confirmation và reminder worker đã có service layer.
 - SKU và order hỗ trợ sửa/xóa bằng câu lệnh tự nhiên có bước xác nhận. `/orders` hiển thị UUID

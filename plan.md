@@ -64,6 +64,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Confidence threshold là config, không phải cơ chế an toàn duy nhất.
 - Lưu `conversation_states` theo user/chat trong 30 phút để ghép các câu trả lời làm rõ; xóa state
   sau khi yêu cầu hoàn chỉnh, hết hạn hoặc người dùng chuyển sang lệnh khác.
+- Lưu `conversation_exchanges` trong 30 ngày; chỉ đưa tối đa 8 lượt gần nhất đã cắt độ dài vào
+  prompt để hiểu tham chiếu như “cái vừa rồi” mà không tăng token theo toàn bộ tuổi hội thoại.
 - Implement `pending_actions`: gắn user/chat, TTL 15 phút, atomic consume.
 - Xử lý nút Đồng ý/Không, gọi `answerCallbackQuery` và vô hiệu hóa keyboard.
 - Tạo fixture tiếng Việt cho câu rõ ràng, sai chính tả, thiếu tham số và thời gian mơ hồ.
@@ -73,6 +75,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Router luôn trả đúng schema.
 - Chuỗi nhiều lượt như “Lịch đi nhậu” → “16h ngày 19/9/2026” giữ lại nội dung và tạo đúng một
   yêu cầu nhắc việc hoàn chỉnh.
+- Lịch sử của mỗi user/chat được cô lập; bản ghi hết hạn được dọn khi đọc và không xuất hiện trong
+  prompt Gemini.
 - Không ghi dữ liệu khi thiếu tham số, confidence thấp hoặc ngày giờ mơ hồ.
 - Callback sai user/chat, hết hạn hoặc bấm hai lần không ghi dữ liệu.
 

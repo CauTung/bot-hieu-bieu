@@ -12,6 +12,11 @@ from modules.order.service import add_order, delete_order, list_orders, total_or
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
 from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import consume_pending_action, create_pending_action
+from services.conversation_history_service import (
+    history_context,
+    recent_exchanges,
+    record_exchange,
+)
 from services.conversation_service import (
     clear_conversation_state,
     get_conversation_state,
@@ -54,6 +59,8 @@ class BotService:
         confidence_threshold: float,
         action_ttl_minutes: int,
         conversation_ttl_minutes: int,
+        history_retention_days: int,
+        history_max_exchanges: int,
         max_message_length: int,
     ) -> None:
         self.session = session
@@ -63,6 +70,8 @@ class BotService:
         self.confidence_threshold = confidence_threshold
         self.action_ttl_minutes = action_ttl_minutes
         self.conversation_ttl_minutes = conversation_ttl_minutes
+        self.history_retention_days = history_retention_days
+        self.history_max_exchanges = history_max_exchanges
         self.max_message_length = max_message_length
 
     def process(self, context: UpdateContext) -> None:
@@ -77,7 +86,7 @@ class BotService:
         if len(context.text) > self.max_message_length:
             self.telegram.send_message(context.chat_id, "Tin nhắn quá dài, vui lòng gửi ngắn hơn.")
             return
-        if self._handle_static_command(context.chat_id, context.text):
+        if self._handle_static_command(context):
             clear_conversation_state(
                 self.session, user_id=context.user_id, chat_id=context.chat_id
             )
@@ -87,6 +96,13 @@ class BotService:
         conversation = get_conversation_state(
             self.session, user_id=context.user_id, chat_id=context.chat_id, now=now
         )
+        exchanges = recent_exchanges(
+            self.session,
+            user_id=context.user_id,
+            chat_id=context.chat_id,
+            limit=self.history_max_exchanges,
+            now=now,
+        )
         decision = self._classify_locally(context.text)
         if decision is not None and conversation is not None:
             clear_conversation_state(
@@ -95,9 +111,11 @@ class BotService:
             conversation = None
         if decision is None:
             try:
-                conversation_context: dict[str, object] | None = None
+                conversation_context: dict[str, object] = {
+                    "recent_history": history_context(exchanges)
+                }
                 if conversation is not None:
-                    conversation_context = {
+                    conversation_context["pending_request"] = {
                         "intent": conversation.intent,
                         "params": conversation.params,
                         "clarification_question": conversation.clarification_question,
@@ -126,7 +144,7 @@ class BotService:
                     ttl_minutes=self.conversation_ttl_minutes,
                     now=now,
                 )
-            self.telegram.send_message(context.chat_id, question)
+            self._send_and_record(context, question, decision)
             return
 
         if decision.intent == Intent.CREATE_REMINDER and decision.params.remind_at:
@@ -145,10 +163,7 @@ class BotService:
                     ttl_minutes=self.conversation_ttl_minutes,
                     now=now,
                 )
-                self.telegram.send_message(
-                    context.chat_id,
-                    incomplete.clarification_question,
-                )
+                self._send_and_record(context, incomplete.clarification_question, incomplete)
                 return
 
         clear_conversation_state(
@@ -188,7 +203,7 @@ class BotService:
                 ]
             ]
         }
-        self.telegram.send_message(context.chat_id, summary, reply_markup=keyboard)
+        self._send_and_record(context, summary, decision, reply_markup=keyboard)
 
     def _handle_callback(self, context: UpdateContext) -> None:
         assert context.callback_query_id is not None
@@ -221,6 +236,7 @@ class BotService:
         if verb == "cancel":
             self.telegram.answer_callback_query(context.callback_query_id, "Đã hủy.")
             self.telegram.send_message(context.chat_id, "Đã hủy yêu cầu.")
+            self._record_callback(context, "Đã hủy yêu cầu.", action.action_type, action.payload)
             return
         try:
             result = self._execute_action(
@@ -229,9 +245,11 @@ class BotService:
         except ValueError as exc:
             self.telegram.answer_callback_query(context.callback_query_id, "Không thực hiện được.")
             self.telegram.send_message(context.chat_id, str(exc))
+            self._record_callback(context, str(exc), action.action_type, action.payload)
             return
         self.telegram.answer_callback_query(context.callback_query_id, "Đã xác nhận.")
         self.telegram.send_message(context.chat_id, result)
+        self._record_callback(context, result, action.action_type, action.payload)
 
     def _execute_action(
         self, action_type: str, payload: dict[str, object], user_id: int, chat_id: int
@@ -343,7 +361,7 @@ class BotService:
             text = "Không tìm thấy SKU phù hợp."
             if products:
                 text = "\n".join(f"• {item.sku} — {item.name}" for item in products)
-            self.telegram.send_message(context.chat_id, text)
+            self._send_and_record(context, text, decision)
         elif decision.intent == Intent.QUERY_ORDERS:
             start, end = parse_order_period(
                 params.period, now=now, timezone_name=self.timezone_name
@@ -362,36 +380,77 @@ class BotService:
                 for item in orders
             )
             suffix = f"\nCác order gần nhất:\n{details}" if details else ""
-            self.telegram.send_message(
-                context.chat_id,
+            text = (
                 f"Tổng số lượng từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}: {total}."
-                f"{suffix}",
+                f"{suffix}"
             )
+            self._send_and_record(context, text, decision)
         elif decision.intent == Intent.LIST_REMINDERS:
             reminders = list_pending_reminders(self.session, user_id=context.user_id)
             if not reminders:
-                self.telegram.send_message(context.chat_id, "Bạn không có nhắc việc đang chờ.")
+                self._send_and_record(context, "Bạn không có nhắc việc đang chờ.", decision)
                 return
             zone = ZoneInfo(self.timezone_name)
             text = "\n".join(
                 f"• {item.id} — {item.remind_at.astimezone(zone):%H:%M %d/%m/%Y}: {item.content}"
                 for item in reminders
             )
-            self.telegram.send_message(context.chat_id, text)
+            self._send_and_record(context, text, decision)
         elif decision.intent == Intent.QA and params.question:
             answer = decision.answer or "Mình chưa có câu trả lời."
-            self.telegram.send_message(context.chat_id, answer)
+            self._send_and_record(context, answer, decision)
         else:
-            self.telegram.send_message(
-                context.chat_id, "Mình chưa hiểu yêu cầu, bạn nói rõ hơn nhé."
+            self._send_and_record(
+                context, "Mình chưa hiểu yêu cầu, bạn nói rõ hơn nhé.", decision
             )
 
-    def _handle_static_command(self, chat_id: int, text: str) -> bool:
-        command = text.strip().split(maxsplit=1)[0].lower()
+    def _send_and_record(
+        self,
+        context: UpdateContext,
+        text: str,
+        decision: IntentDecision | None = None,
+        **extra: Any,
+    ) -> None:
+        assert context.chat_id is not None and context.user_id is not None
+        self.telegram.send_message(context.chat_id, text, **extra)
+        if context.text:
+            record_exchange(
+                self.session,
+                user_id=context.user_id,
+                chat_id=context.chat_id,
+                user_text=context.text,
+                assistant_text=text,
+                retention_days=self.history_retention_days,
+                intent=decision.intent.value if decision else None,
+                details=(decision.params.model_dump(mode="json") if decision else None),
+            )
+
+    def _record_callback(
+        self,
+        context: UpdateContext,
+        text: str,
+        intent: str,
+        details: dict[str, object],
+    ) -> None:
+        assert context.chat_id is not None and context.user_id is not None
+        record_exchange(
+            self.session,
+            user_id=context.user_id,
+            chat_id=context.chat_id,
+            user_text="Xác nhận thao tác đang chờ",
+            assistant_text=text,
+            retention_days=self.history_retention_days,
+            intent=intent,
+            details=details,
+        )
+
+    def _handle_static_command(self, context: UpdateContext) -> bool:
+        assert context.chat_id is not None and context.text is not None
+        command = context.text.strip().split(maxsplit=1)[0].lower()
         if command not in {"/start", "/help"}:
             return False
-        self.telegram.send_message(
-            chat_id,
+        self._send_and_record(
+            context,
             "Các lệnh nhanh:\n"
             "• /sku <mã hoặc tên> — tìm SKU\n"
             "• /orders [YYYY-MM hoặc YYYY-MM-DD] — xem tổng đơn\n"

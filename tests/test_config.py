@@ -19,6 +19,8 @@ def test_settings_parse_allowed_user_ids() -> None:
     assert settings.telegram_allowed_user_ids == frozenset({123, 456})
     assert settings.telegram_enforce_allowlist is False
     assert settings.conversation_state_ttl_minutes == 30
+    assert settings.conversation_history_retention_days == 30
+    assert settings.conversation_history_max_exchanges == 8
     assert settings.app_timezone == "Asia/Ho_Chi_Minh"
     assert settings.gemini_fallback_models == (
         "gemini-flash-lite-latest",

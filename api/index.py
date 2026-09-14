@@ -81,6 +81,8 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
                 confidence_threshold=settings.intent_confidence_threshold,
                 action_ttl_minutes=settings.pending_action_ttl_minutes,
                 conversation_ttl_minutes=settings.conversation_state_ttl_minutes,
+                history_retention_days=settings.conversation_history_retention_days,
+                history_max_exchanges=settings.conversation_history_max_exchanges,
                 max_message_length=settings.max_message_length,
             )
             service.process(context)
