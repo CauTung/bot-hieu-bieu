@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import datetime
 
 from google import genai
@@ -21,6 +22,9 @@ Với intent khác qa, answer phải là null.
 Khi sửa SKU, sku là mã hiện tại và new_sku là mã mới nếu đổi mã.
 Khi sửa order, order_id là UUID bản ghi; new_sku là SKU mới nếu đổi sản phẩm.
 Không được suy đoán order_id. Sửa và xóa là thao tác riêng, không phân loại thành tạo mới.
+Nếu có TRẠNG THÁI HỘI THOẠI, tin nhắn hiện tại là câu trả lời cho câu hỏi làm rõ trước đó.
+Hãy giữ lại các params đã biết, bổ sung thông tin mới và tiếp tục đúng intent đang chờ.
+Chỉ bỏ trạng thái cũ khi người dùng thể hiện rõ họ muốn chuyển sang một yêu cầu khác.
 """
 
 
@@ -43,11 +47,21 @@ class GeminiIntentRouter:
         now: datetime,
         timezone_name: str,
         telegram_user_id: int,
+        conversation_context: dict[str, object] | None = None,
     ) -> IntentDecision:
         if not text.strip():
             raise ValueError("Message text must not be empty")
 
-        input_text = f"Thời gian hiện tại: {now.isoformat()} ({timezone_name})\nTin nhắn: {text}"
+        context_text = ""
+        if conversation_context:
+            context_text = (
+                "TRẠNG THÁI HỘI THOẠI:\n"
+                f"{json.dumps(conversation_context, ensure_ascii=False, default=str)}\n"
+            )
+        input_text = (
+            f"Thời gian hiện tại: {now.isoformat()} ({timezone_name})\n"
+            f"{context_text}Tin nhắn hiện tại: {text}"
+        )
 
         try:
             intent_schema = {

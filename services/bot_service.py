@@ -12,6 +12,11 @@ from modules.order.service import add_order, delete_order, list_orders, total_or
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
 from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import consume_pending_action, create_pending_action
+from services.conversation_service import (
+    clear_conversation_state,
+    get_conversation_state,
+    save_conversation_state,
+)
 from services.date_ranges import parse_order_period
 from services.update_processor import UpdateContext
 
@@ -24,6 +29,7 @@ class RouterPort(Protocol):
         now: datetime,
         timezone_name: str,
         telegram_user_id: int,
+        conversation_context: dict[str, object] | None = None,
     ) -> IntentDecision: ...
 
 
@@ -47,6 +53,7 @@ class BotService:
         timezone_name: str,
         confidence_threshold: float,
         action_ttl_minutes: int,
+        conversation_ttl_minutes: int,
         max_message_length: int,
     ) -> None:
         self.session = session
@@ -55,6 +62,7 @@ class BotService:
         self.timezone_name = timezone_name
         self.confidence_threshold = confidence_threshold
         self.action_ttl_minutes = action_ttl_minutes
+        self.conversation_ttl_minutes = conversation_ttl_minutes
         self.max_message_length = max_message_length
 
     def process(self, context: UpdateContext) -> None:
@@ -70,17 +78,36 @@ class BotService:
             self.telegram.send_message(context.chat_id, "Tin nhắn quá dài, vui lòng gửi ngắn hơn.")
             return
         if self._handle_static_command(context.chat_id, context.text):
+            clear_conversation_state(
+                self.session, user_id=context.user_id, chat_id=context.chat_id
+            )
             return
         self.telegram.send_chat_action(context.chat_id)
         now = datetime.now(timezone.utc)
+        conversation = get_conversation_state(
+            self.session, user_id=context.user_id, chat_id=context.chat_id, now=now
+        )
         decision = self._classify_locally(context.text)
+        if decision is not None and conversation is not None:
+            clear_conversation_state(
+                self.session, user_id=context.user_id, chat_id=context.chat_id
+            )
+            conversation = None
         if decision is None:
             try:
+                conversation_context: dict[str, object] | None = None
+                if conversation is not None:
+                    conversation_context = {
+                        "intent": conversation.intent,
+                        "params": conversation.params,
+                        "clarification_question": conversation.clarification_question,
+                    }
                 decision = self.router.classify(
                     context.text,
                     now=now.astimezone(ZoneInfo(self.timezone_name)),
                     timezone_name=self.timezone_name,
                     telegram_user_id=context.user_id,
+                    conversation_context=conversation_context,
                 )
             except RouterError:
                 self.telegram.send_message(
@@ -90,17 +117,43 @@ class BotService:
                 return
         if decision.clarification_question or decision.confidence < self.confidence_threshold:
             question = decision.clarification_question or "Bạn có thể nói rõ yêu cầu hơn không?"
+            if decision.intent != Intent.UNKNOWN:
+                save_conversation_state(
+                    self.session,
+                    user_id=context.user_id,
+                    chat_id=context.chat_id,
+                    decision=decision,
+                    ttl_minutes=self.conversation_ttl_minutes,
+                    now=now,
+                )
             self.telegram.send_message(context.chat_id, question)
             return
 
         if decision.intent == Intent.CREATE_REMINDER and decision.params.remind_at:
             remind_at = datetime.fromisoformat(decision.params.remind_at)
             if remind_at.astimezone(timezone.utc) <= now:
+                incomplete = decision.model_copy(deep=True)
+                incomplete.params.remind_at = None
+                incomplete.clarification_question = (
+                    "Thời gian đó đã qua. Bạn muốn được nhắc vào ngày và giờ nào?"
+                )
+                save_conversation_state(
+                    self.session,
+                    user_id=context.user_id,
+                    chat_id=context.chat_id,
+                    decision=incomplete,
+                    ttl_minutes=self.conversation_ttl_minutes,
+                    now=now,
+                )
                 self.telegram.send_message(
                     context.chat_id,
-                    "Thời gian đó đã qua. Bạn muốn được nhắc vào ngày và giờ nào?",
+                    incomplete.clarification_question,
                 )
                 return
+
+        clear_conversation_state(
+            self.session, user_id=context.user_id, chat_id=context.chat_id
+        )
 
         if decision.intent in {
             Intent.CREATE_SKU,

@@ -73,6 +73,28 @@ def test_router_uses_responses_structured_output(monkeypatch: pytest.MonkeyPatch
     assert fake_client.models.captured_kwargs["config"].temperature == 0.0
 
 
+def test_router_includes_pending_conversation_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeClient(decision_json())
+    monkeypatch.setattr("core.gemini_router.genai.Client", lambda **kwargs: fake_client)
+
+    GeminiIntentRouter("test-key", "configured-model").classify(
+        "vào lúc 16h ngày 19/9/2026",
+        now=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        timezone_name="Asia/Ho_Chi_Minh",
+        telegram_user_id=123,
+        conversation_context={
+            "intent": "create_reminder",
+            "params": {"content": "Lịch đi nhậu", "remind_at": None},
+            "clarification_question": "Bạn muốn đặt vào thời gian nào?",
+        },
+    )
+
+    contents = fake_client.models.captured_kwargs["contents"]
+    assert "TRẠNG THÁI HỘI THOẠI" in contents
+    assert "Lịch đi nhậu" in contents
+    assert "vào lúc 16h ngày 19/9/2026" in contents
+
+
 def test_router_falls_back_to_next_model(monkeypatch: pytest.MonkeyPatch) -> None:
     class FallbackModels:
         def __init__(self) -> None:

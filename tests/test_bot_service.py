@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -56,20 +57,25 @@ class FakeTelegram:
 class FakeRouter:
     def __init__(self, decision: IntentDecision) -> None:
         self.decision = decision
+        self.calls: list[dict[str, Any]] = []
 
     def classify(self, *args: Any, **kwargs: Any) -> IntentDecision:
+        self.calls.append(kwargs)
         return self.decision
 
 
 def make_service(decision: IntentDecision) -> tuple[BotService, FakeTelegram]:
     telegram = FakeTelegram()
+    session = MagicMock()
+    session.get.return_value = None
     service = BotService(
-        session=MagicMock(),
+        session=session,
         telegram=telegram,
         router=FakeRouter(decision),
         timezone_name="Asia/Ho_Chi_Minh",
         confidence_threshold=0.8,
         action_ttl_minutes=15,
+        conversation_ttl_minutes=30,
         max_message_length=4000,
     )
     return service, telegram
@@ -215,3 +221,51 @@ def test_message_length_is_bounded() -> None:
     service.max_message_length = 3
     service.process(message_context("1234"))
     assert "quá dài" in telegram.messages[0][1]
+
+
+def test_clarification_is_saved_for_the_next_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    decision = IntentDecision(
+        intent=Intent.CREATE_REMINDER,
+        params=params(content="Lịch đi nhậu"),
+        confidence=0.95,
+        clarification_question="Bạn muốn đặt vào thời gian nào?",
+    )
+    service, telegram = make_service(decision)
+    save = MagicMock()
+    monkeypatch.setattr(bot_module, "save_conversation_state", save)
+
+    service.process(message_context("Lịch đi nhậu"))
+
+    save.assert_called_once()
+    assert save.call_args.kwargs["decision"] is decision
+    assert telegram.messages[0][1] == "Bạn muốn đặt vào thời gian nào?"
+
+
+def test_followup_includes_saved_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+    decision = IntentDecision(
+        intent=Intent.CREATE_REMINDER,
+        params=params(content="Lịch đi nhậu", remind_at=future),
+        confidence=0.99,
+        clarification_question=None,
+    )
+    service, _ = make_service(decision)
+    saved = SimpleNamespace(
+        intent="create_reminder",
+        params=params(content="Lịch đi nhậu").model_dump(mode="json"),
+        clarification_question="Bạn muốn đặt vào thời gian nào?",
+    )
+    monkeypatch.setattr(bot_module, "get_conversation_state", lambda *args, **kwargs: saved)
+    monkeypatch.setattr(
+        bot_module,
+        "create_pending_action",
+        lambda *args, **kwargs: SimpleNamespace(id=uuid.uuid4()),
+    )
+
+    service.process(message_context("vào lúc 16h ngày 19/9/2026"))
+
+    router = service.router
+    assert isinstance(router, FakeRouter)
+    context = router.calls[0]["conversation_context"]
+    assert context["intent"] == "create_reminder"
+    assert context["params"]["content"] == "Lịch đi nhậu"

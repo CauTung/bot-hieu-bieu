@@ -84,6 +84,16 @@ def test_edit_sku_requires_a_changed_field() -> None:
         )
 
 
+def test_edit_sku_can_ask_which_field_to_change() -> None:
+    decision = IntentDecision(
+        intent=Intent.EDIT_SKU,
+        params=empty_params(sku="VAY01"),
+        confidence=0.9,
+        clarification_question="Bạn muốn sửa thông tin nào?",
+    )
+    assert decision.clarification_question == "Bạn muốn sửa thông tin nào?"
+
+
 def test_delete_order_requires_valid_uuid() -> None:
     decision = IntentDecision(
         intent=Intent.DELETE_ORDER,

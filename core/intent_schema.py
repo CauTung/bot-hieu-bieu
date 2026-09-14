@@ -115,7 +115,7 @@ class IntentDecision(BaseModel):
             and not self.answer
         ):
             raise ValueError("answer is required for qa intent")
-        if self.intent == Intent.EDIT_SKU and not any(
+        if self.intent == Intent.EDIT_SKU and not self.clarification_question and not any(
             value is not None
             for value in (
                 self.params.new_sku,
@@ -125,7 +125,7 @@ class IntentDecision(BaseModel):
             )
         ):
             raise ValueError("edit_sku requires at least one changed field")
-        if self.intent == Intent.EDIT_ORDER and not any(
+        if self.intent == Intent.EDIT_ORDER and not self.clarification_question and not any(
             value is not None
             for value in (
                 self.params.new_sku,

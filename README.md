@@ -33,6 +33,8 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
   `GEMINI_FALLBACK_MODELS`.
 - `/help`, `/sku`, `/orders` và `/reminders` được parse bằng code, không tiêu quota Gemini.
 - QA được trả lời trong cùng request phân loại intent, không gọi AI lần thứ hai.
+- Các câu trả lời làm rõ được nhớ theo từng user/chat trong 30 phút, nên nội dung và thời gian có
+  thể được cung cấp qua nhiều tin nhắn liên tiếp.
 - Bot gửi trạng thái Telegram `typing` khi xử lý; lỗi/quota Gemini trả thông báo thay vì im lặng.
 - SKU, order, pending confirmation và reminder worker đã có service layer.
 - SKU và order hỗ trợ sửa/xóa bằng câu lệnh tự nhiên có bước xác nhận. `/orders` hiển thị UUID

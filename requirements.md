@@ -44,6 +44,10 @@ LLM router dùng Structured Outputs và trả về:
 - Schema phải khai báo chặt kiểu dữ liệu và trường bắt buộc theo từng intent.
 - `confidence` chỉ là một tín hiệu. Code phải validate lại toàn bộ `params`.
 - Nếu confidence dưới ngưỡng cấu hình hoặc thiếu/mơ hồ tham số, bot hỏi lại; không đoán bừa.
+- Khi hỏi làm rõ, bot lưu intent và các params đã biết theo `telegram_user_id + chat_id`. Tin nhắn
+  tiếp theo phải được ghép vào trạng thái này thay vì phân loại như một yêu cầu độc lập.
+- Trạng thái làm rõ hết hạn sau thời gian cấu hình (mặc định 30 phút), được xóa khi yêu cầu hoàn
+  chỉnh hoặc khi người dùng chuyển sang một lệnh rõ ràng khác.
 - “Hôm nay”, “tháng này”, “thứ hai” được hiểu theo `Asia/Ho_Chi_Minh`.
 - Nếu giờ không kèm ngày đã trôi qua, hỏi lại “hôm nay hay ngày mai”.
 - Input ngày mơ hồ như `01/02` phải hỏi lại nếu không xác định chắc định dạng.

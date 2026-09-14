@@ -16,13 +16,16 @@ def test_past_reminder_is_not_sent_to_confirmation() -> None:
         clarification_question=None,
     )
     telegram = FakeTelegram()
+    session = MagicMock()
+    session.get.return_value = None
     service = BotService(
-        session=MagicMock(),
+        session=session,
         telegram=telegram,
         router=FakeRouter(decision),
         timezone_name="Asia/Ho_Chi_Minh",
         confidence_threshold=0.8,
         action_ttl_minutes=15,
+        conversation_ttl_minutes=30,
         max_message_length=4000,
     )
     service.process(UpdateContext(1, 123, 456, "nhắc tôi", None, None, 10))
