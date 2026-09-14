@@ -7,6 +7,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Đã code: schema/migration, webhook security, allowlist, deduplicate update, Gemini router,
   confirmation state, SKU, order, reminder worker, QA và test tự động.
 - Production đang chạy trên Vercel với Supabase, Telegram và Gemini API.
+- Allowlist Telegram đang tạm tắt theo cấu hình `TELEGRAM_ENFORCE_ALLOWLIST=false`; bot hiện cho
+  phép mọi Telegram user gửi yêu cầu và cần bật lại sau giai đoạn thử nghiệm.
 - Đã smoke-test webhook thật. Gemini Free Tier từng trả `429`; bot hiện trả lỗi thân thiện,
   không tạo vòng retry Telegram và có model fallback giới hạn.
 - Các giai đoạn bên dưới chỉ được đánh dấu hoàn tất sau khi tiêu chí production tương ứng pass.

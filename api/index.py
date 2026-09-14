@@ -56,7 +56,9 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
     except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
         return Response(status_code=400, content=json.dumps({"ok": False, "error": "Invalid Telegram update"}), media_type="application/json")
 
-    if not is_allowed_user(context.user_id, settings.telegram_allowed_user_ids):
+    if settings.telegram_enforce_allowlist and not is_allowed_user(
+        context.user_id, settings.telegram_allowed_user_ids
+    ):
         if context.user_id is None:
             return Response(status_code=200, content=json.dumps({"ok": True, "ignored": True}), media_type="application/json")
         log_event("unauthorized_user", update_id=context.update_id, user_id=context.user_id)

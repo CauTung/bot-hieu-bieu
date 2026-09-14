@@ -17,6 +17,7 @@ def base_environment() -> dict[str, str]:
 def test_settings_parse_allowed_user_ids() -> None:
     settings = Settings(**base_environment())  # type: ignore[arg-type]
     assert settings.telegram_allowed_user_ids == frozenset({123, 456})
+    assert settings.telegram_enforce_allowlist is False
     assert settings.app_timezone == "Asia/Ho_Chi_Minh"
     assert settings.gemini_fallback_models == (
         "gemini-flash-lite-latest",
@@ -44,6 +45,14 @@ def test_settings_parse_single_user_id_from_environment(monkeypatch: object) -> 
     finally:
         for key in environment:
             os.environ.pop(key, None)
+
+
+def test_allowlist_can_be_empty_while_disabled() -> None:
+    environment = base_environment()
+    environment["TELEGRAM_ALLOWED_USER_IDS"] = ""
+    settings = Settings(**environment)  # type: ignore[arg-type]
+    assert settings.telegram_allowed_user_ids == frozenset()
+    assert settings.telegram_enforce_allowlist is False
 
 
 def test_supabase_postgres_url_uses_psycopg_driver() -> None:

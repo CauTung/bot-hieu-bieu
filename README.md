@@ -27,7 +27,8 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 
 ## Luồng phát triển hiện tại
 
-- Webhook đã có secret validation, allowlist và deduplicate `update_id`.
+- Webhook đã có secret validation và deduplicate `update_id`. Allowlist người dùng đang tạm tắt;
+  đặt `TELEGRAM_ENFORCE_ALLOWLIST=true` để bật lại.
 - Intent router dùng Gemini Structured Output với primary model và fallback giới hạn qua
   `GEMINI_FALLBACK_MODELS`.
 - `/help`, `/sku`, `/orders` và `/reminders` được parse bằng code, không tiêu quota Gemini.

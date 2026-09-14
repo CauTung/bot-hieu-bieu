@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
     telegram_webhook_secret: str = Field(min_length=16, alias="TELEGRAM_WEBHOOK_SECRET")
     telegram_allowed_user_ids: Annotated[frozenset[int], NoDecode] = Field(
-        alias="TELEGRAM_ALLOWED_USER_IDS"
+        default=frozenset(), alias="TELEGRAM_ALLOWED_USER_IDS"
+    )
+    telegram_enforce_allowlist: bool = Field(
+        default=False, alias="TELEGRAM_ENFORCE_ALLOWLIST"
     )
     reminder_cron_secret: str = Field(min_length=16, alias="REMINDER_CRON_SECRET")
     gemini_api_key: str = Field(alias="GEMINI_API_KEY")
@@ -35,8 +38,6 @@ class Settings(BaseSettings):
     def parse_user_ids(cls, value: object) -> object:
         if isinstance(value, str):
             values = [part.strip() for part in value.split(",") if part.strip()]
-            if not values:
-                raise ValueError("TELEGRAM_ALLOWED_USER_IDS must not be empty")
             return frozenset(int(part) for part in values)
         return value
 
