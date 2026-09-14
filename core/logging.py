@@ -2,6 +2,11 @@ import json
 import logging
 from typing import Any
 
+# httpx logs full request URLs. Telegram embeds the bot token in the URL, so INFO
+# request logging must never be enabled in production.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger("bot_hieu_bieu")
 if not logger.handlers:
     handler = logging.StreamHandler()
