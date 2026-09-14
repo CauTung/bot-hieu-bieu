@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from core.intent_schema import Intent, IntentDecision
 from services.bot_service import BotService
 from services.update_processor import UpdateContext
-from tests.test_bot_service import FakeQA, FakeRouter, FakeTelegram, params
+from tests.test_bot_service import FakeRouter, FakeTelegram, params
 
 
 def test_past_reminder_is_not_sent_to_confirmation() -> None:
@@ -20,7 +20,6 @@ def test_past_reminder_is_not_sent_to_confirmation() -> None:
         session=MagicMock(),
         telegram=telegram,
         router=FakeRouter(decision),
-        qa=FakeQA(),
         timezone_name="Asia/Ho_Chi_Minh",
         confidence_threshold=0.8,
         action_ttl_minutes=15,

@@ -35,10 +35,14 @@ class FakeTelegram:
         self.messages: list[tuple[int, str, dict[str, Any]]] = []
         self.answers: list[tuple[str, str | None]] = []
         self.edits: list[tuple[int, int]] = []
+        self.actions: list[tuple[int, str]] = []
 
     def send_message(self, chat_id: int, text: str, **extra: Any) -> dict[str, Any]:
         self.messages.append((chat_id, text, extra))
         return {}
+
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
+        self.actions.append((chat_id, action))
 
     def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> None:
         self.answers.append((callback_query_id, text))
@@ -55,18 +59,12 @@ class FakeRouter:
         return self.decision
 
 
-class FakeQA:
-    def answer(self, question: str, *, telegram_user_id: int) -> str:
-        return f"QA:{question}:{telegram_user_id}"
-
-
 def make_service(decision: IntentDecision) -> tuple[BotService, FakeTelegram]:
     telegram = FakeTelegram()
     service = BotService(
         session=MagicMock(),
         telegram=telegram,
         router=FakeRouter(decision),
-        qa=FakeQA(),
         timezone_name="Asia/Ho_Chi_Minh",
         confidence_threshold=0.8,
         action_ttl_minutes=15,
@@ -147,10 +145,61 @@ def test_qa_uses_separate_client() -> None:
         params=params(question="Kích thước ảnh Facebook?"),
         confidence=0.95,
         clarification_question=None,
+        answer="Kích thước phù hợp là 1200 x 630 px.",
     )
     service, telegram = make_service(decision)
     service.process(message_context("Kích thước ảnh Facebook?"))
-    assert telegram.messages[0][1] == "QA:Kích thước ảnh Facebook?:123"
+    assert telegram.messages[0][1] == "Kích thước phù hợp là 1200 x 630 px."
+    assert telegram.actions == [(456, "typing")]
+
+
+def test_fast_command_skips_gemini() -> None:
+    decision = IntentDecision(
+        intent=Intent.UNKNOWN,
+        params=params(),
+        confidence=1,
+        clarification_question=None,
+    )
+    service, telegram = make_service(decision)
+    service.router.classify = MagicMock()
+
+    service.process(message_context("/reminders"))
+
+    service.router.classify.assert_not_called()
+    assert telegram.actions == [(456, "typing")]
+
+
+def test_help_command_skips_gemini_and_typing() -> None:
+    decision = IntentDecision(
+        intent=Intent.UNKNOWN,
+        params=params(),
+        confidence=1,
+        clarification_question=None,
+    )
+    service, telegram = make_service(decision)
+    service.router.classify = MagicMock()
+
+    service.process(message_context("/help"))
+
+    service.router.classify.assert_not_called()
+    assert telegram.actions == []
+    assert "/sku" in telegram.messages[0][1]
+
+
+def test_router_failure_returns_friendly_message() -> None:
+    decision = IntentDecision(
+        intent=Intent.UNKNOWN,
+        params=params(),
+        confidence=1,
+        clarification_question=None,
+    )
+    service, telegram = make_service(decision)
+    service.router.classify = MagicMock(side_effect=bot_module.RouterError("quota exceeded"))
+
+    service.process(message_context("Xin chào"))
+
+    assert telegram.actions == [(456, "typing")]
+    assert "sự cố với dịch vụ AI" in telegram.messages[0][1]
 
 
 def test_message_length_is_bounded() -> None:

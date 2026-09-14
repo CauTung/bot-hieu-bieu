@@ -42,6 +42,10 @@ class IntentDecision(BaseModel):
     params: IntentParams
     confidence: float = Field(ge=0, le=1)
     clarification_question: str | None
+    answer: str | None = Field(
+        default=None,
+        description="Câu trả lời hoàn chỉnh khi intent là qa; null với intent khác",
+    )
 
     @model_validator(mode="after")
     def validate_required_params(self) -> "IntentDecision":
@@ -85,6 +89,13 @@ class IntentDecision(BaseModel):
                 "clarification_question is required when intent parameters are missing: "
                 + ", ".join(missing)
             )
+        if (
+            self.intent == Intent.QA
+            and self.params.question
+            and not self.clarification_question
+            and not self.answer
+        ):
+            raise ValueError("answer is required for qa intent")
         if (
             self.intent == Intent.LOOKUP_SKU
             and not (self.params.sku or self.params.name)

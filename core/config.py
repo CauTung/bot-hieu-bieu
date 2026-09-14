@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     reminder_cron_secret: str = Field(min_length=16, alias="REMINDER_CRON_SECRET")
     gemini_api_key: str = Field(alias="GEMINI_API_KEY")
     gemini_router_model: str = Field(alias="GEMINI_ROUTER_MODEL")
-    gemini_qa_model: str = Field(alias="GEMINI_QA_MODEL")
+    gemini_fallback_models: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=("gemini-flash-lite-latest", "gemini-flash-latest"),
+        alias="GEMINI_FALLBACK_MODELS",
+    )
     app_timezone: str = Field(default="Asia/Ho_Chi_Minh", alias="APP_TIMEZONE")
     pending_action_ttl_minutes: int = Field(default=15, ge=1, le=1440)
     reminder_max_attempts: int = Field(default=5, ge=1, le=20)
@@ -35,6 +38,13 @@ class Settings(BaseSettings):
             if not values:
                 raise ValueError("TELEGRAM_ALLOWED_USER_IDS must not be empty")
             return frozenset(int(part) for part in values)
+        return value
+
+    @field_validator("gemini_fallback_models", mode="before")
+    @classmethod
+    def parse_fallback_models(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
         return value
 
     @field_validator("database_url")

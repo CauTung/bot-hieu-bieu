@@ -4,10 +4,11 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 
 ## Trạng thái triển khai
 
-- Đã code local: schema/migration, webhook security, allowlist, deduplicate update, OpenAI router,
+- Đã code: schema/migration, webhook security, allowlist, deduplicate update, Gemini router,
   confirmation state, SKU, order, reminder worker, QA và test tự động.
-- Đã chọn Supabase nhưng chưa chạy migration/integration test trên database thật.
-- Chưa production-verified vì chưa có Supabase URL, Telegram token và OpenAI key.
+- Production đang chạy trên Vercel với Supabase, Telegram và Gemini API.
+- Đã smoke-test webhook thật. Gemini Free Tier từng trả `429`; bot hiện trả lỗi thân thiện,
+  không tạo vòng retry Telegram và có model fallback giới hạn.
 - Các giai đoạn bên dưới chỉ được đánh dấu hoàn tất sau khi tiêu chí production tương ứng pass.
 
 ## 1. Quyết định phải chốt trước khi code
@@ -15,7 +16,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 1. PostgreSQL provider đã chọn: **Supabase**; dùng connection pooling cho serverless.
 2. Chốt `TELEGRAM_ALLOWED_USER_IDS` và các chat được phép sử dụng.
 3. Chọn cron ngoài có thể chạy mỗi 1–5 phút và gửi Authorization header.
-4. Chọn model OpenAI hiện hành theo structured output, latency và chi phí; model ID nằm trong environment variable, không hardcode.
+4. Chọn Gemini primary/fallback theo structured output, latency và quota; model ID nằm trong
+   environment variable, không hardcode trong luồng nghiệp vụ.
 5. Chốt retention cho `processed_updates`, `pending_actions` và logs.
 
 ## 2. Roadmap
@@ -53,6 +55,8 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 **Công việc:**
 
 - Định nghĩa strict schema cho toàn bộ intent trong requirements.
+- Parse các lệnh chắc chắn (`/help`, `/sku`, `/orders`, `/reminders`) bằng code trước để không
+  tiêu quota LLM.
 - Cung cấp giờ hiện tại theo `Asia/Ho_Chi_Minh` cho router.
 - Validate code-side SKU, quantity, ngày/giờ và độ dài nội dung.
 - Confidence threshold là config, không phải cơ chế an toàn duy nhất.
@@ -111,13 +115,16 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Worker chết ở `processing` thì reminder được reclaim.
 - Reminder hợp lệ được gửi trễ không quá 5 phút; reminder hủy không được gửi.
 
-### Giai đoạn 5: Hỏi đáp tự do
+### Giai đoạn 5: Hỏi đáp tự do và tối ưu quota
 
 **Mục tiêu:** Trả lời câu hỏi công việc với chi phí và hành vi có kiểm soát.
 
 **Công việc:**
 
-- Tách router call khỏi QA call.
+- Gộp phân loại intent và câu trả lời QA trong cùng một Gemini structured-output request.
+- Chỉ gọi Gemini khi lệnh không thể xử lý chắc chắn bằng code.
+- Thử primary model rồi các model fallback duy nhất trong `GEMINI_FALLBACK_MODELS`; khi tất cả
+  thất bại, gửi thông báo thân thiện và hoàn tất update để Telegram không retry vô hạn.
 - Giới hạn input/output tokens, timeout và retry.
 - Nêu rõ khi không chắc hoặc thiếu dữ liệu thời sự.
 - QA không được gọi mutation ngoài confirmation flow.
@@ -138,7 +145,7 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Unit tests: parser, validation, timezone, state transitions.
 - Integration tests PostgreSQL: migration, constraint, transaction, concurrent claim.
 - Telegram contract tests cho message/callback/retry.
-- Fault injection: OpenAI timeout, Telegram 429/5xx, DB disconnect, worker chết sau claim.
+- Fault injection: Gemini timeout/429/5xx, Telegram 429/5xx, DB disconnect, worker chết sau claim.
 - Rate limit, request size limit và log redaction.
 - Kiểm tra Fluid Compute/function duration thật và cấu hình `maxDuration` phù hợp.
 - Production smoke test trên URL Vercel ổn định với bot thật.

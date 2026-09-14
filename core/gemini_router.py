@@ -1,9 +1,9 @@
 import hashlib
 from datetime import datetime
 
-from pydantic import ValidationError
 from google import genai
 from google.genai import types
+from pydantic import ValidationError
 
 from core.intent_schema import IntentDecision
 
@@ -16,13 +16,22 @@ ROUTER_INSTRUCTIONS = """Bạn phân loại tin nhắn tiếng Việt cho bot qu
 Chỉ trích xuất dữ liệu người dùng đã nói. Không tự bịa SKU, số lượng hoặc thời gian.
 Ngày giờ phải dùng ISO 8601. Nếu ngày/giờ mơ hồ, để giá trị null và đặt câu hỏi làm rõ.
 Các trường params không dùng cho intent phải là null. Confidence nằm trong khoảng 0 đến 1.
+Nếu intent là qa, hãy đồng thời trả lời câu hỏi ngắn gọn bằng tiếng Việt trong trường answer.
+Với intent khác qa, answer phải là null.
 """
 
 
 class GeminiIntentRouter:
-    def __init__(self, api_key: str, model: str, *, timeout_seconds: float = 12.0) -> None:
-        self._client = genai.Client(api_key=api_key, http_options={'timeout': timeout_seconds})
-        self._model = model
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        fallback_models: tuple[str, ...] = (),
+        timeout_seconds: float = 12.0,
+    ) -> None:
+        self._client = genai.Client(api_key=api_key, http_options={"timeout": int(timeout_seconds)})
+        self._models = tuple(dict.fromkeys((model, *fallback_models)))
 
     def classify(
         self,
@@ -43,14 +52,28 @@ class GeminiIntentRouter:
                 "properties": {
                     "intent": {
                         "type": "STRING",
-                        "enum": ["create_sku", "lookup_sku", "add_order", "query_orders", "create_reminder", "list_reminders", "cancel_reminder", "qa", "unknown"]
+                        "enum": [
+                            "create_sku",
+                            "lookup_sku",
+                            "add_order",
+                            "query_orders",
+                            "create_reminder",
+                            "list_reminders",
+                            "cancel_reminder",
+                            "qa",
+                            "unknown",
+                        ]
                     },
                     "params": {
                         "type": "OBJECT",
                         "properties": {
                             "sku": {"type": "STRING", "nullable": True},
                             "name": {"type": "STRING", "nullable": True},
-                            "tags": {"type": "ARRAY", "items": {"type": "STRING"}, "nullable": True},
+                            "tags": {
+                                "type": "ARRAY",
+                                "items": {"type": "STRING"},
+                                "nullable": True,
+                            },
                             "notes": {"type": "STRING", "nullable": True},
                             "quantity": {"type": "INTEGER", "nullable": True},
                             "order_date": {"type": "STRING", "nullable": True},
@@ -64,31 +87,37 @@ class GeminiIntentRouter:
                     },
                     "confidence": {"type": "NUMBER"},
                     "clarification_question": {"type": "STRING", "nullable": True},
+                    "answer": {"type": "STRING", "nullable": True},
                 },
-                "required": ["intent", "params", "confidence"]
+                "required": ["intent", "params", "confidence", "clarification_question", "answer"]
             }
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=input_text,
-                config=types.GenerateContentConfig(
-                    system_instruction=ROUTER_INSTRUCTIONS,
-                    response_mime_type="application/json",
-                    response_schema=intent_schema,
-                    max_output_tokens=500,
-                    temperature=0.0,
-                )
-            )
-            
-            if not response.text:
-                raise RouterError("Gemini response contained no output text")
-                
-            return IntentDecision.model_validate_json(response.text)
-        except ValidationError as exc:
-            raise RouterError("Gemini returned an invalid structured response") from exc
-        except Exception as exc:
-            if isinstance(exc, RouterError):
-                raise
-            raise RouterError(f"Gemini request failed: {str(exc)}") from exc
+            last_error: Exception | None = None
+            for model in self._models:
+                try:
+                    response = self._client.models.generate_content(
+                        model=model,
+                        contents=input_text,
+                        config=types.GenerateContentConfig(
+                            system_instruction=ROUTER_INSTRUCTIONS,
+                            response_mime_type="application/json",
+                            response_schema=intent_schema,
+                            max_output_tokens=900,
+                            temperature=0.0,
+                        )
+                    )
+                    if not response.text:
+                        raise RouterError("Gemini response contained no output text")
+                    return IntentDecision.model_validate_json(response.text)
+                except (ValidationError, ValueError) as exc:
+                    last_error = RouterError("Gemini returned an invalid structured response")
+                    last_error.__cause__ = exc
+                except Exception as exc:
+                    last_error = exc
+            if isinstance(last_error, RouterError):
+                raise last_error
+            raise RouterError(f"All Gemini models failed: {last_error}") from last_error
+        except RouterError:
+            raise
 
     @staticmethod
     def _safety_identifier(telegram_user_id: int) -> str:

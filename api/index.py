@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from core.config import get_settings
 from core.db import session_scope
 from core.logging import log_event
-from core.gemini_qa import GeminiQAClient
 from core.gemini_router import GeminiIntentRouter
 from core.security import is_allowed_user, secrets_match
 from core.telegram_client import TelegramClient
@@ -72,9 +71,10 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
                 session=session,
                 telegram=telegram,
                 router=GeminiIntentRouter(
-                    settings.gemini_api_key, settings.gemini_router_model
+                    settings.gemini_api_key,
+                    settings.gemini_router_model,
+                    fallback_models=settings.gemini_fallback_models,
                 ),
-                qa=GeminiQAClient(settings.gemini_api_key, settings.gemini_qa_model),
                 timezone_name=settings.app_timezone,
                 confidence_threshold=settings.intent_confidence_threshold,
                 action_ttl_minutes=settings.pending_action_ttl_minutes,

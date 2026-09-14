@@ -1,3 +1,4 @@
+import unicodedata
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Protocol
@@ -5,7 +6,8 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from core.intent_schema import Intent, IntentDecision
+from core.gemini_router import RouterError
+from core.intent_schema import Intent, IntentDecision, IntentParams
 from modules.order.service import add_order, total_orders
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
 from modules.sku.service import create_product, find_products
@@ -25,12 +27,10 @@ class RouterPort(Protocol):
     ) -> IntentDecision: ...
 
 
-class QAPort(Protocol):
-    def answer(self, question: str, *, telegram_user_id: int) -> str: ...
-
-
 class TelegramPort(Protocol):
     def send_message(self, chat_id: int, text: str, **extra: Any) -> dict[str, Any]: ...
+
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None: ...
 
     def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> None: ...
 
@@ -44,7 +44,6 @@ class BotService:
         session: Session,
         telegram: TelegramPort,
         router: RouterPort,
-        qa: QAPort,
         timezone_name: str,
         confidence_threshold: float,
         action_ttl_minutes: int,
@@ -53,7 +52,6 @@ class BotService:
         self.session = session
         self.telegram = telegram
         self.router = router
-        self.qa = qa
         self.timezone_name = timezone_name
         self.confidence_threshold = confidence_threshold
         self.action_ttl_minutes = action_ttl_minutes
@@ -71,13 +69,25 @@ class BotService:
         if len(context.text) > self.max_message_length:
             self.telegram.send_message(context.chat_id, "Tin nhắn quá dài, vui lòng gửi ngắn hơn.")
             return
+        if self._handle_static_command(context.chat_id, context.text):
+            return
+        self.telegram.send_chat_action(context.chat_id)
         now = datetime.now(timezone.utc)
-        decision = self.router.classify(
-            context.text,
-            now=now.astimezone(ZoneInfo(self.timezone_name)),
-            timezone_name=self.timezone_name,
-            telegram_user_id=context.user_id,
-        )
+        decision = self._classify_locally(context.text)
+        if decision is None:
+            try:
+                decision = self.router.classify(
+                    context.text,
+                    now=now.astimezone(ZoneInfo(self.timezone_name)),
+                    timezone_name=self.timezone_name,
+                    telegram_user_id=context.user_id,
+                )
+            except RouterError:
+                self.telegram.send_message(
+                    context.chat_id,
+                    "Mình đang gặp sự cố với dịch vụ AI. Bạn thử lại sau ít phút nhé.",
+                )
+                return
         if decision.clarification_question or decision.confidence < self.confidence_threshold:
             question = decision.clarification_question or "Bạn có thể nói rõ yêu cầu hơn không?"
             self.telegram.send_message(context.chat_id, question)
@@ -248,14 +258,84 @@ class BotService:
             )
             self.telegram.send_message(context.chat_id, text)
         elif decision.intent == Intent.QA and params.question:
-            self.telegram.send_message(
-                context.chat_id,
-                self.qa.answer(params.question, telegram_user_id=context.user_id),
-            )
+            answer = decision.answer or "Mình chưa có câu trả lời."
+            self.telegram.send_message(context.chat_id, answer)
         else:
             self.telegram.send_message(
                 context.chat_id, "Mình chưa hiểu yêu cầu, bạn nói rõ hơn nhé."
             )
+
+    def _handle_static_command(self, chat_id: int, text: str) -> bool:
+        command = text.strip().split(maxsplit=1)[0].lower()
+        if command not in {"/start", "/help"}:
+            return False
+        self.telegram.send_message(
+            chat_id,
+            "Các lệnh nhanh:\n"
+            "• /sku <mã hoặc tên> — tìm SKU\n"
+            "• /orders [YYYY-MM hoặc YYYY-MM-DD] — xem tổng đơn\n"
+            "• /reminders — xem nhắc việc đang chờ\n"
+            "Bạn cũng có thể nhập yêu cầu tự nhiên để bot hỗ trợ.",
+        )
+        return True
+
+    @staticmethod
+    def _classify_locally(text: str) -> IntentDecision | None:
+        stripped = text.strip()
+        command, _, argument = stripped.partition(" ")
+        command = command.lower()
+        empty = IntentParams(
+            sku=None,
+            name=None,
+            tags=None,
+            notes=None,
+            quantity=None,
+            order_date=None,
+            source=None,
+            period=None,
+            content=None,
+            remind_at=None,
+            reminder_id=None,
+            question=None,
+        )
+        if command == "/sku":
+            query = argument.strip()
+            if not query:
+                return IntentDecision(
+                    intent=Intent.LOOKUP_SKU,
+                    params=empty,
+                    confidence=1,
+                    clarification_question="Bạn muốn tìm mã SKU hoặc tên mẫu nào?",
+                )
+            return IntentDecision(
+                intent=Intent.LOOKUP_SKU,
+                params=empty.model_copy(update={"sku": query}),
+                confidence=1,
+                clarification_question=None,
+            )
+        if command == "/orders":
+            return IntentDecision(
+                intent=Intent.QUERY_ORDERS,
+                params=empty.model_copy(update={"period": argument.strip() or None}),
+                confidence=1,
+                clarification_question=None,
+            )
+        normalized = "".join(
+            char
+            for char in unicodedata.normalize("NFD", stripped.lower())
+            if unicodedata.category(char) != "Mn"
+        )
+        if command == "/reminders" or normalized in {
+            "danh sach nhac viec",
+            "xem nhac viec",
+        }:
+            return IntentDecision(
+                intent=Intent.LIST_REMINDERS,
+                params=empty,
+                confidence=1,
+                clarification_question=None,
+            )
+        return None
 
     @staticmethod
     def _confirmation_summary(decision: IntentDecision) -> str:

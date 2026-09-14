@@ -18,6 +18,17 @@ def test_settings_parse_allowed_user_ids() -> None:
     settings = Settings(**base_environment())  # type: ignore[arg-type]
     assert settings.telegram_allowed_user_ids == frozenset({123, 456})
     assert settings.app_timezone == "Asia/Ho_Chi_Minh"
+    assert settings.gemini_fallback_models == (
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest",
+    )
+
+
+def test_settings_parse_fallback_models() -> None:
+    environment = base_environment()
+    environment["GEMINI_FALLBACK_MODELS"] = "model-a, model-b,model-a"
+    settings = Settings(**environment)  # type: ignore[arg-type]
+    assert settings.gemini_fallback_models == ("model-a", "model-b", "model-a")
 
 
 def test_settings_parse_single_user_id_from_environment(monkeypatch: object) -> None:

@@ -28,10 +28,23 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 ## Luồng phát triển hiện tại
 
 - Webhook đã có secret validation, allowlist và deduplicate `update_id`.
-- Intent router dùng OpenAI Responses API Structured Outputs.
+- Intent router dùng Gemini Structured Output với primary model và fallback giới hạn qua
+  `GEMINI_FALLBACK_MODELS`.
+- `/help`, `/sku`, `/orders` và `/reminders` được parse bằng code, không tiêu quota Gemini.
+- QA được trả lời trong cùng request phân loại intent, không gọi AI lần thứ hai.
+- Bot gửi trạng thái Telegram `typing` khi xử lý; lỗi/quota Gemini trả thông báo thay vì im lặng.
 - SKU, order, pending confirmation và reminder worker đã có service layer.
 - `/api/check-reminders` yêu cầu `Authorization: Bearer <REMINDER_CRON_SECRET>`.
-- Chưa được production-verified cho đến khi có Supabase URL, Telegram token và OpenAI key thật.
+- Webhook production trên Vercel đã được smoke-test với Telegram thật.
+
+## Lệnh nhanh không dùng AI
+
+```text
+/help
+/sku <mã hoặc tên mẫu>
+/orders [YYYY-MM hoặc YYYY-MM-DD]
+/reminders
+```
 
 ## Đăng ký webhook
 

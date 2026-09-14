@@ -48,6 +48,7 @@ def decision_json() -> str:
             },
             "confidence": 0.98,
             "clarification_question": None,
+            "answer": None,
         }
     )
 
@@ -68,6 +69,36 @@ def test_router_uses_responses_structured_output(monkeypatch: pytest.MonkeyPatch
     assert fake_client.models.captured_kwargs["model"] == "configured-model"
     assert fake_client.models.captured_kwargs["config"].response_mime_type == "application/json"
     assert fake_client.models.captured_kwargs["config"].temperature == 0.0
+
+
+def test_router_falls_back_to_next_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FallbackModels:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            if kwargs["model"] == "primary-model":
+                raise RuntimeError("429 RESOURCE_EXHAUSTED")
+            return FakeGenerateContentResponse(decision_json())
+
+    fake_client = FakeClient(decision_json())
+    fake_client.models = FallbackModels()
+    monkeypatch.setattr("core.gemini_router.genai.Client", lambda **kwargs: fake_client)
+
+    decision = GeminiIntentRouter(
+        "test-key",
+        "primary-model",
+        fallback_models=("fallback-model",),
+    ).classify(
+        "Lưu mã VAY01 cho Váy xếp ly",
+        now=datetime(2026, 9, 13, tzinfo=timezone.utc),
+        timezone_name="Asia/Ho_Chi_Minh",
+        telegram_user_id=123,
+    )
+
+    assert decision.intent.value == "create_sku"
+    assert fake_client.models.calls == ["primary-model", "fallback-model"]
 
 
 def test_router_rejects_missing_output(monkeypatch: pytest.MonkeyPatch) -> None:

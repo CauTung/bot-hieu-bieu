@@ -18,6 +18,9 @@ class TelegramClient:
     def send_message(self, chat_id: int, text: str, **extra: Any) -> dict[str, Any]:
         return self._post("sendMessage", {"chat_id": chat_id, "text": text, **extra})
 
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
+        self._post("sendChatAction", {"chat_id": chat_id, "action": action})
+
     def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> None:
         payload: dict[str, Any] = {"callback_query_id": callback_query_id}
         if text:

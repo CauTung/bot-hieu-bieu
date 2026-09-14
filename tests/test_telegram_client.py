@@ -31,6 +31,16 @@ def test_send_message_returns_telegram_result(monkeypatch: pytest.MonkeyPatch) -
     assert result == {"message_id": 10}
 
 
+def test_send_chat_action_posts_typing_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(*args: Any, **kwargs: Any) -> FakeResponse:
+        assert args[0].endswith("/sendChatAction")
+        assert kwargs["json"] == {"chat_id": 123, "action": "typing"}
+        return FakeResponse(200, {"ok": True, "result": True})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    TelegramClient("test-token").send_chat_action(123)
+
+
 def test_rate_limit_error_exposes_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx,
