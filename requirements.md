@@ -13,8 +13,10 @@ Người dùng thao tác chủ yếu bằng **tin nhắn tự do**. Bot dùng LL
 
 ### 1.1. Phạm vi MVP
 
-- SKU: tạo và tra cứu; chưa hỗ trợ sửa/xóa.
-- Đơn hàng: ghi nhận số lượng sản phẩm theo một SKU và một ngày; tra cứu tổng theo ngày hoặc tháng. Một bản ghi không đại diện cho đơn hàng nhiều dòng.
+- SKU: tạo, tra cứu, sửa và xóa. Đổi mã SKU phải chuyển các order liên quan; không cho xóa
+  SKU còn order để tránh mất dữ liệu ngoài ý muốn.
+- Đơn hàng: ghi nhận, sửa, xóa và tra cứu theo một SKU/ngày. Mỗi order có UUID để chọn đúng
+  bản ghi; chỉ Telegram user đã tạo mới được sửa/xóa order đó.
 - Nhắc việc: tạo, liệt kê reminder chưa gửi và hủy reminder.
 - Hỏi đáp: trả lời trực tiếp, không tự động ghi dữ liệu.
 - Chỉ các Telegram user ID trong allowlist được sử dụng bot.
@@ -36,7 +38,9 @@ LLM router dùng Structured Outputs và trả về:
 {"intent": "...", "params": {}, "confidence": 0.0}
 ```
 
-- Intent MVP: `create_sku`, `lookup_sku`, `add_order`, `query_orders`, `create_reminder`, `list_reminders`, `cancel_reminder`, `qa`, `unknown`.
+- Intent: `create_sku`, `edit_sku`, `delete_sku`, `lookup_sku`, `add_order`, `edit_order`,
+  `delete_order`, `query_orders`, `create_reminder`, `list_reminders`, `cancel_reminder`, `qa`,
+  `unknown`.
 - Schema phải khai báo chặt kiểu dữ liệu và trường bắt buộc theo từng intent.
 - `confidence` chỉ là một tín hiệu. Code phải validate lại toàn bộ `params`.
 - Nếu confidence dưới ngưỡng cấu hình hoặc thiếu/mơ hồ tham số, bot hỏi lại; không đoán bừa.
@@ -46,7 +50,8 @@ LLM router dùng Structured Outputs và trả về:
 
 ## 4. Xác nhận hành động ghi
 
-Tạo SKU, ghi đơn, tạo hoặc hủy reminder đều phải được xác nhận bằng nút `✅ Đúng` / `❌ Không`.
+Tạo/sửa/xóa SKU, ghi/sửa/xóa order, tạo hoặc hủy reminder đều phải được xác nhận bằng nút
+`✅ Đúng` / `❌ Không`.
 
 Luồng chuẩn:
 

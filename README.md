@@ -35,6 +35,8 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 - QA được trả lời trong cùng request phân loại intent, không gọi AI lần thứ hai.
 - Bot gửi trạng thái Telegram `typing` khi xử lý; lỗi/quota Gemini trả thông báo thay vì im lặng.
 - SKU, order, pending confirmation và reminder worker đã có service layer.
+- SKU và order hỗ trợ sửa/xóa bằng câu lệnh tự nhiên có bước xác nhận. `/orders` hiển thị UUID
+  để chọn đúng order; SKU còn order sẽ không bị xóa trực tiếp.
 - `/api/check-reminders` yêu cầu `Authorization: Bearer <REMINDER_CRON_SECRET>`.
 - Webhook production trên Vercel đã được smoke-test với Telegram thật.
 

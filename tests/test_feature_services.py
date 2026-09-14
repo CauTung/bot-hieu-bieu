@@ -4,11 +4,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from models.order import Order
 from models.product import Product
 from models.reminder import Reminder
-from modules.order.service import add_order, total_orders
+from modules.order.service import add_order, delete_order, list_orders, total_orders, update_order
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
-from modules.sku.service import create_product, find_products
+from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import create_pending_action
 from services.reminder_worker import claim_due_reminders, mark_reminder_sent
 
@@ -41,6 +42,57 @@ def test_find_products_returns_scalar_results() -> None:
     session = MagicMock()
     session.scalars.return_value = expected
     assert find_products(session, "váy") == expected
+
+
+def test_update_product_fields_without_renaming() -> None:
+    product = Product(sku="VAY01", name="Tên cũ", tags=["cũ"], notes=None)
+    session = MagicMock()
+    session.get.return_value = product
+
+    result = update_product(
+        session,
+        sku="vay01",
+        name=" Tên mới ",
+        tags=[" mới ", ""],
+        notes=" ghi chú ",
+    )
+
+    assert result is product
+    assert result.name == "Tên mới"
+    assert result.tags == ["mới"]
+    assert result.notes == "ghi chú"
+
+
+def test_update_product_renames_sku_and_moves_orders() -> None:
+    product = Product(sku="OLD", name="Mẫu")
+    session = MagicMock()
+    session.get.side_effect = [product, None]
+
+    result = update_product(session, sku="OLD", new_sku="new")
+
+    assert result.sku == "NEW"
+    session.execute.assert_called_once()
+    session.delete.assert_called_once_with(product)
+
+
+def test_delete_product_rejects_sku_with_orders() -> None:
+    product = Product(sku="VAY01", name="Váy")
+    session = MagicMock()
+    session.get.return_value = product
+    session.scalar.return_value = 2
+
+    with pytest.raises(ValueError, match="đang có order"):
+        delete_product(session, sku="VAY01")
+
+
+def test_delete_product_without_orders() -> None:
+    product = Product(sku="VAY01", name="Váy")
+    session = MagicMock()
+    session.get.return_value = product
+    session.scalar.return_value = 0
+
+    assert delete_product(session, sku="VAY01") is True
+    session.delete.assert_called_once_with(product)
 
 
 def test_add_order_requires_existing_product() -> None:
@@ -78,6 +130,44 @@ def test_add_and_total_orders() -> None:
         )
         == 8
     )
+
+
+def test_list_update_and_delete_order_are_scoped_to_owner() -> None:
+    order_id = uuid.uuid4()
+    order = Order(
+        id=order_id,
+        sku="VAY01",
+        quantity=2,
+        order_date=date(2026, 9, 13),
+        telegram_user_id=123,
+    )
+    session = MagicMock()
+    session.scalars.return_value = [order]
+    assert list_orders(
+        session,
+        telegram_user_id=123,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 10, 1),
+    ) == [order]
+
+    session.get.side_effect = [order, Product(sku="VAY02", name="Váy 2")]
+    updated = update_order(
+        session,
+        order_id=order_id,
+        telegram_user_id=123,
+        sku="vay02",
+        quantity=5,
+        order_date=date(2026, 9, 14),
+    )
+    assert updated.sku == "VAY02"
+    assert updated.quantity == 5
+    assert updated.order_date == date(2026, 9, 14)
+
+    session.get.side_effect = None
+    session.get.return_value = order
+    assert delete_order(session, order_id=order_id, telegram_user_id=456) is False
+    assert delete_order(session, order_id=order_id, telegram_user_id=123) is True
+    session.delete.assert_called_once_with(order)
 
 
 def test_create_reminder_requires_future_aware_time() -> None:

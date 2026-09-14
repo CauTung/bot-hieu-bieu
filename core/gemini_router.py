@@ -18,6 +18,9 @@ Ngày giờ phải dùng ISO 8601. Nếu ngày/giờ mơ hồ, để giá trị 
 Các trường params không dùng cho intent phải là null. Confidence nằm trong khoảng 0 đến 1.
 Nếu intent là qa, hãy đồng thời trả lời câu hỏi ngắn gọn bằng tiếng Việt trong trường answer.
 Với intent khác qa, answer phải là null.
+Khi sửa SKU, sku là mã hiện tại và new_sku là mã mới nếu đổi mã.
+Khi sửa order, order_id là UUID bản ghi; new_sku là SKU mới nếu đổi sản phẩm.
+Không được suy đoán order_id. Sửa và xóa là thao tác riêng, không phân loại thành tạo mới.
 """
 
 
@@ -54,8 +57,12 @@ class GeminiIntentRouter:
                         "type": "STRING",
                         "enum": [
                             "create_sku",
+                            "edit_sku",
+                            "delete_sku",
                             "lookup_sku",
                             "add_order",
+                            "edit_order",
+                            "delete_order",
                             "query_orders",
                             "create_reminder",
                             "list_reminders",
@@ -68,6 +75,8 @@ class GeminiIntentRouter:
                         "type": "OBJECT",
                         "properties": {
                             "sku": {"type": "STRING", "nullable": True},
+                            "new_sku": {"type": "STRING", "nullable": True},
+                            "order_id": {"type": "STRING", "nullable": True},
                             "name": {"type": "STRING", "nullable": True},
                             "tags": {
                                 "type": "ARRAY",
@@ -83,7 +92,23 @@ class GeminiIntentRouter:
                             "remind_at": {"type": "STRING", "nullable": True},
                             "reminder_id": {"type": "STRING", "nullable": True},
                             "question": {"type": "STRING", "nullable": True},
-                        }
+                        },
+                        "required": [
+                            "sku",
+                            "new_sku",
+                            "order_id",
+                            "name",
+                            "tags",
+                            "notes",
+                            "quantity",
+                            "order_date",
+                            "source",
+                            "period",
+                            "content",
+                            "remind_at",
+                            "reminder_id",
+                            "question",
+                        ],
                     },
                     "confidence": {"type": "NUMBER"},
                     "clarification_question": {"type": "STRING", "nullable": True},

@@ -14,6 +14,8 @@ from services.update_processor import UpdateContext
 def params(**overrides: object) -> IntentParams:
     values: dict[str, object] = {
         "sku": None,
+        "new_sku": None,
+        "order_id": None,
         "name": None,
         "tags": None,
         "notes": None,

@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from core.gemini_router import RouterError
 from core.intent_schema import Intent, IntentDecision, IntentParams
-from modules.order.service import add_order, total_orders
+from modules.order.service import add_order, delete_order, list_orders, total_orders, update_order
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
-from modules.sku.service import create_product, find_products
+from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import consume_pending_action, create_pending_action
 from services.date_ranges import parse_order_period
 from services.update_processor import UpdateContext
@@ -104,7 +104,11 @@ class BotService:
 
         if decision.intent in {
             Intent.CREATE_SKU,
+            Intent.EDIT_SKU,
+            Intent.DELETE_SKU,
             Intent.ADD_ORDER,
+            Intent.EDIT_ORDER,
+            Intent.DELETE_ORDER,
             Intent.CREATE_REMINDER,
             Intent.CANCEL_REMINDER,
         }:
@@ -165,9 +169,14 @@ class BotService:
             self.telegram.answer_callback_query(context.callback_query_id, "Đã hủy.")
             self.telegram.send_message(context.chat_id, "Đã hủy yêu cầu.")
             return
-        result = self._execute_action(
-            action.action_type, action.payload, context.user_id, context.chat_id
-        )
+        try:
+            result = self._execute_action(
+                action.action_type, action.payload, context.user_id, context.chat_id
+            )
+        except ValueError as exc:
+            self.telegram.answer_callback_query(context.callback_query_id, "Không thực hiện được.")
+            self.telegram.send_message(context.chat_id, str(exc))
+            return
         self.telegram.answer_callback_query(context.callback_query_id, "Đã xác nhận.")
         self.telegram.send_message(context.chat_id, result)
 
@@ -191,6 +200,29 @@ class BotService:
                 if created
                 else f"SKU {product.sku} đã tồn tại cho mẫu '{product.name}'."
             )
+        if action_type == Intent.EDIT_SKU.value:
+            raw_tags = payload.get("tags")
+            tags = [str(tag) for tag in raw_tags] if isinstance(raw_tags, list) else None
+            product = update_product(
+                self.session,
+                sku=str(payload["sku"]),
+                new_sku=(
+                    str(payload["new_sku"])
+                    if payload.get("new_sku") is not None
+                    else None
+                ),
+                name=str(payload["name"]) if payload.get("name") is not None else None,
+                tags=tags,
+                notes=str(payload["notes"]) if payload.get("notes") is not None else None,
+            )
+            return f"Đã cập nhật SKU {product.sku}: {product.name}."
+        if action_type == Intent.DELETE_SKU.value:
+            sku = str(payload["sku"])
+            return (
+                f"Đã xóa SKU {sku.upper()}."
+                if delete_product(self.session, sku=sku)
+                else f"Không tìm thấy SKU {sku.upper()}."
+            )
         if action_type == Intent.ADD_ORDER.value:
             raw_source = payload.get("source")
             source = raw_source if isinstance(raw_source, str) else None
@@ -205,6 +237,30 @@ class BotService:
             return (
                 f"Đã ghi nhận {order.quantity} sản phẩm SKU {order.sku} "
                 f"ngày {order.order_date:%d/%m/%Y}."
+            )
+        if action_type == Intent.EDIT_ORDER.value:
+            raw_date = payload.get("order_date")
+            order = update_order(
+                self.session,
+                order_id=uuid.UUID(str(payload["order_id"])),
+                telegram_user_id=user_id,
+                sku=str(payload["new_sku"]) if payload.get("new_sku") else None,
+                quantity=int(str(payload["quantity"])) if payload.get("quantity") else None,
+                order_date=date.fromisoformat(str(raw_date)) if raw_date else None,
+                source=str(payload["source"]) if payload.get("source") is not None else None,
+            )
+            return (
+                f"Đã cập nhật order {order.id}: {order.quantity} sản phẩm SKU {order.sku}, "
+                f"ngày {order.order_date:%d/%m/%Y}."
+            )
+        if action_type == Intent.DELETE_ORDER.value:
+            order_id = uuid.UUID(str(payload["order_id"]))
+            return (
+                f"Đã xóa order {order_id}."
+                if delete_order(
+                    self.session, order_id=order_id, telegram_user_id=user_id
+                )
+                else "Không tìm thấy order hoặc order không thuộc tài khoản của bạn."
             )
         if action_type == Intent.CREATE_REMINDER.value:
             reminder = create_reminder(
@@ -242,9 +298,21 @@ class BotService:
             total = total_orders(
                 self.session, telegram_user_id=context.user_id, start_date=start, end_date=end
             )
+            orders = list_orders(
+                self.session,
+                telegram_user_id=context.user_id,
+                start_date=start,
+                end_date=end,
+            )
+            details = "\n".join(
+                f"• {item.id} — {item.order_date:%d/%m/%Y} — {item.sku} × {item.quantity}"
+                for item in orders
+            )
+            suffix = f"\nCác order gần nhất:\n{details}" if details else ""
             self.telegram.send_message(
                 context.chat_id,
-                f"Tổng số lượng từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}: {total}.",
+                f"Tổng số lượng từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}: {total}."
+                f"{suffix}",
             )
         elif decision.intent == Intent.LIST_REMINDERS:
             reminders = list_pending_reminders(self.session, user_id=context.user_id)
@@ -286,6 +354,8 @@ class BotService:
         command = command.lower()
         empty = IntentParams(
             sku=None,
+            new_sku=None,
+            order_id=None,
             name=None,
             tags=None,
             notes=None,
@@ -342,8 +412,26 @@ class BotService:
         params = decision.params
         if decision.intent == Intent.CREATE_SKU:
             return f"Tạo SKU {params.sku} cho mẫu '{params.name}'?"
+        if decision.intent == Intent.EDIT_SKU:
+            changes = ", ".join(
+                f"{label}: {value}"
+                for label, value in (
+                    ("mã mới", params.new_sku),
+                    ("tên", params.name),
+                    ("tags", params.tags),
+                    ("ghi chú", params.notes),
+                )
+                if value is not None
+            )
+            return f"Cập nhật SKU {params.sku} — {changes}?"
+        if decision.intent == Intent.DELETE_SKU:
+            return f"Xóa SKU {params.sku}? Thao tác này không thể hoàn tác."
         if decision.intent == Intent.ADD_ORDER:
             return f"Ghi {params.quantity} sản phẩm SKU {params.sku} ngày {params.order_date}?"
+        if decision.intent == Intent.EDIT_ORDER:
+            return f"Cập nhật order {params.order_id} theo thông tin vừa nhập?"
+        if decision.intent == Intent.DELETE_ORDER:
+            return f"Xóa order {params.order_id}? Thao tác này không thể hoàn tác."
         if decision.intent == Intent.CREATE_REMINDER:
             return f"Đặt nhắc lúc {params.remind_at}: {params.content}?"
         if decision.intent == Intent.CANCEL_REMINDER:

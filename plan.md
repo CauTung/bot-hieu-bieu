@@ -74,20 +74,24 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 
 ### Giai đoạn 3: SKU và đơn hàng
 
-**Mục tiêu:** Hoàn thiện tạo/tra SKU và ghi/tra cứu số lượng đơn.
+**Mục tiêu:** Hoàn thiện CRUD SKU và CRUD/tra cứu số lượng đơn.
 
 **Công việc:**
 
 - Normalize SKU uppercase/trim và bảo đảm unique không phân biệt hoa thường.
 - Tạo SKU qua confirmation; tra chính xác, theo tên/tags và gợi ý gần đúng.
+- Sửa/xóa SKU qua confirmation; đổi mã chuyển toàn bộ order liên quan, xóa bị chặn khi SKU
+  vẫn còn order.
 - Order chỉ nhận quantity nguyên dương và SKU tồn tại.
+- `/orders` hiển thị UUID các bản ghi gần nhất; sửa/xóa order qua confirmation và giới hạn theo
+  Telegram user đã tạo.
 - Tổng hợp theo ngày hoặc tháng; mặc định tháng hiện tại.
 - Tính boundary theo `Asia/Ho_Chi_Minh`, không dựa vào timezone Vercel.
 - Transaction bảo đảm callback retry không gây double write.
 
 **Tiêu chí hoàn thành:**
 
-- Tạo SKU và order chỉ sau khi xác nhận.
+- Tạo/sửa/xóa SKU và order chỉ sau khi xác nhận.
 - `vay01` và `VAY01` không thành hai SKU.
 - Cùng update/callback bị retry vẫn chỉ tạo một order.
 - Query đúng tại biên ngày, tháng và năm theo UTC+7.

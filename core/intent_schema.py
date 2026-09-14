@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 from enum import Enum
 
@@ -6,8 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class Intent(str, Enum):
     CREATE_SKU = "create_sku"
+    EDIT_SKU = "edit_sku"
+    DELETE_SKU = "delete_sku"
     LOOKUP_SKU = "lookup_sku"
     ADD_ORDER = "add_order"
+    EDIT_ORDER = "edit_order"
+    DELETE_ORDER = "delete_order"
     QUERY_ORDERS = "query_orders"
     CREATE_REMINDER = "create_reminder"
     LIST_REMINDERS = "list_reminders"
@@ -22,6 +27,8 @@ class IntentParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sku: str | None = Field(description="Mã SKU do người dùng nêu")
+    new_sku: str | None = Field(description="Mã SKU mới khi sửa SKU hoặc order")
+    order_id: str | None = Field(description="UUID của order cần sửa hoặc xóa")
     name: str | None = Field(description="Tên mẫu hoặc từ khóa tìm mẫu")
     tags: list[str] | None = Field(description="Danh sách tag sản phẩm")
     notes: str | None = Field(description="Ghi chú sản phẩm")
@@ -62,6 +69,14 @@ class IntentDecision(BaseModel):
                 self.clarification_question = (
                     self.clarification_question or "Ngày đơn hàng là ngày nào?"
                 )
+        if self.params.order_id is not None:
+            try:
+                uuid.UUID(self.params.order_id)
+            except ValueError:
+                self.params.order_id = None
+                self.clarification_question = (
+                    self.clarification_question or "Bạn cung cấp đúng ID của order cần sửa/xóa nhé."
+                )
         if self.params.remind_at is not None:
             try:
                 parsed_reminder = datetime.fromisoformat(self.params.remind_at)
@@ -74,8 +89,12 @@ class IntentDecision(BaseModel):
                 )
         required: dict[Intent, tuple[str, ...]] = {
             Intent.CREATE_SKU: ("sku", "name"),
+            Intent.EDIT_SKU: ("sku",),
+            Intent.DELETE_SKU: ("sku",),
             Intent.LOOKUP_SKU: (),
             Intent.ADD_ORDER: ("sku", "quantity", "order_date"),
+            Intent.EDIT_ORDER: ("order_id",),
+            Intent.DELETE_ORDER: ("order_id",),
             Intent.QUERY_ORDERS: (),
             Intent.CREATE_REMINDER: ("content", "remind_at"),
             Intent.CANCEL_REMINDER: ("reminder_id",),
@@ -96,6 +115,26 @@ class IntentDecision(BaseModel):
             and not self.answer
         ):
             raise ValueError("answer is required for qa intent")
+        if self.intent == Intent.EDIT_SKU and not any(
+            value is not None
+            for value in (
+                self.params.new_sku,
+                self.params.name,
+                self.params.tags,
+                self.params.notes,
+            )
+        ):
+            raise ValueError("edit_sku requires at least one changed field")
+        if self.intent == Intent.EDIT_ORDER and not any(
+            value is not None
+            for value in (
+                self.params.new_sku,
+                self.params.quantity,
+                self.params.order_date,
+                self.params.source,
+            )
+        ):
+            raise ValueError("edit_order requires at least one changed field")
         if (
             self.intent == Intent.LOOKUP_SKU
             and not (self.params.sku or self.params.name)

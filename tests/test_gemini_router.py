@@ -34,6 +34,8 @@ def decision_json() -> str:
             "intent": "create_sku",
             "params": {
                 "sku": "VAY01",
+                "new_sku": None,
+                "order_id": None,
                 "name": "Váy xếp ly",
                 "tags": None,
                 "notes": None,

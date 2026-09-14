@@ -7,6 +7,8 @@ from core.intent_schema import Intent, IntentDecision, IntentParams, intent_json
 def empty_params(**overrides: object) -> IntentParams:
     values: dict[str, object] = {
         "sku": None,
+        "new_sku": None,
+        "order_id": None,
         "name": None,
         "tags": None,
         "notes": None,
@@ -70,3 +72,24 @@ def test_json_schema_is_strict() -> None:
     assert schema["additionalProperties"] is False
     params_schema = schema["$defs"]["IntentParams"]  # type: ignore[index]
     assert params_schema["additionalProperties"] is False  # type: ignore[index]
+
+
+def test_edit_sku_requires_a_changed_field() -> None:
+    with pytest.raises(ValidationError, match="changed field"):
+        IntentDecision(
+            intent=Intent.EDIT_SKU,
+            params=empty_params(sku="VAY01"),
+            confidence=1,
+            clarification_question=None,
+        )
+
+
+def test_delete_order_requires_valid_uuid() -> None:
+    decision = IntentDecision(
+        intent=Intent.DELETE_ORDER,
+        params=empty_params(order_id="not-a-uuid"),
+        confidence=1,
+        clarification_question=None,
+    )
+    assert decision.params.order_id is None
+    assert decision.clarification_question is not None
