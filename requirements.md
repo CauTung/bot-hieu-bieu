@@ -8,6 +8,7 @@ Xây một bot Telegram cá nhân cho dev designer 2D, hỗ trợ:
 2. Ghi nhận số lượng đơn theo SKU và tổng hợp theo ngày/tháng.
 3. Đặt, xem và hủy nhắc việc theo thời gian người dùng chọn.
 4. Trả lời câu hỏi tự do trong phạm vi công việc, ví dụ mạng xã hội và Photoshop.
+5. Ghi nhớ ảnh mẫu theo SKU và tra mã SKU khi người dùng chỉ gửi ảnh.
 
 Người dùng thao tác chủ yếu bằng **tin nhắn tự do**. Bot dùng LLM để phân tích ý định nhưng nghiệp vụ, phân quyền, kiểm tra dữ liệu và thao tác database phải do code quyết định.
 
@@ -40,7 +41,7 @@ LLM router dùng Structured Outputs và trả về:
 
 - Intent: `create_sku`, `edit_sku`, `delete_sku`, `lookup_sku`, `add_order`, `edit_order`,
   `delete_order`, `query_orders`, `create_reminder`, `list_reminders`, `cancel_reminder`, `qa`,
-  `unknown`.
+  `register_sku_image`, `unknown`.
 - Schema phải khai báo chặt kiểu dữ liệu và trường bắt buộc theo từng intent.
 - `confidence` chỉ là một tín hiệu. Code phải validate lại toàn bộ `params`.
 - Nếu confidence dưới ngưỡng cấu hình hoặc thiếu/mơ hồ tham số, bot hỏi lại; không đoán bừa.
@@ -89,14 +90,25 @@ Sau khi ghi thành công, bot luôn gửi thông báo rõ ràng. Hành động c
 - Tra cứu không nêu phạm vi mặc định lấy tháng hiện tại theo UTC+7.
 - Query theo ngày/tháng dùng boundary `Asia/Ho_Chi_Minh`.
 
-### 5.3. Nhắc việc
+### 5.3. Nhận diện SKU bằng ảnh
+
+- Người dùng có thể gửi ảnh kèm `đây là mã SKU <mã>` hoặc gửi câu đó rồi gửi ảnh trong thời hạn
+  hội thoại 30 phút.
+- SKU phải tồn tại và việc gắn/gắn lại ảnh phải qua nút xác nhận.
+- Ánh xạ ảnh lưu lâu dài trong PostgreSQL, dùng chung cho catalog; thông tin người tạo/chat được
+  lưu để audit nhưng không giới hạn quyền tra cứu.
+- Tra ảnh ưu tiên `file_unique_id` và SHA-256, sau đó mới dùng perceptual hash cho ảnh bị resize
+  hoặc nén nhẹ. Không trả SKU nếu độ tương đồng thấp hoặc nhiều SKU đồng hạng.
+- Xóa SKU xóa ánh xạ ảnh; đổi mã SKU chuyển ánh xạ sang mã mới.
+
+### 5.4. Nhắc việc
 
 - Thời điểm nhắc phải ở tương lai sau khi xác nhận.
 - Có thể liệt kê và hủy reminder chưa gửi.
 - SLA MVP: gửi đúng hạn hoặc trễ không quá 5 phút, phụ thuộc cron ngoài.
 - Gửi phải retry được; không đánh dấu `sent` trước khi Telegram xác nhận thành công.
 
-### 5.4. Hỏi đáp
+### 5.5. Hỏi đáp
 
 - Trả lời ngắn gọn và nêu rõ khi không chắc hoặc thiếu dữ liệu thời sự.
 - Không đưa nội dung QA vào mutation nếu chưa phân loại lại và xác nhận.
@@ -166,6 +178,16 @@ conversation_exchanges
 - details JSONB NULL
 - created_at TIMESTAMPTZ NOT NULL
 - expires_at TIMESTAMPTZ NOT NULL
+
+sku_image_fingerprints
+- id UUID PK
+- sku TEXT FK -> products.sku ON DELETE CASCADE
+- telegram_file_unique_id TEXT UNIQUE NOT NULL
+- sha256 TEXT NOT NULL
+- perceptual_hash TEXT NOT NULL
+- created_by_user_id BIGINT NOT NULL
+- created_in_chat_id BIGINT NOT NULL
+- created_at TIMESTAMPTZ NOT NULL
 
 processed_updates
 - update_id BIGINT PK

@@ -1,6 +1,6 @@
 # Bot Hiếu Biểu
 
-Telegram bot serverless cho quản lý SKU, số lượng đơn, reminder và hỏi đáp.
+Telegram bot serverless cho quản lý SKU, nhận diện SKU bằng ảnh, số lượng đơn, reminder và hỏi đáp.
 
 Database production đã chọn: **Supabase Postgres**.
 
@@ -41,6 +41,9 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 - SKU, order, pending confirmation và reminder worker đã có service layer.
 - SKU và order hỗ trợ sửa/xóa bằng câu lệnh tự nhiên có bước xác nhận. `/orders` hiển thị UUID
   để chọn đúng order; SKU còn order sẽ không bị xóa trực tiếp.
+- Có thể gửi ảnh kèm chú thích `đây là mã SKU VAY01` (hoặc gửi câu này trước rồi gửi ảnh),
+  xác nhận để lưu. Những lần sau chỉ cần gửi ảnh; bot tra bằng mã ảnh Telegram và dấu vân tay
+  nội dung, không gọi Gemini. Ánh xạ ảnh được giữ lâu dài trong database, không hết hạn sau 30 phút.
 - `/api/check-reminders` yêu cầu `Authorization: Bearer <REMINDER_CRON_SECRET>`.
 - Webhook production trên Vercel đã được smoke-test với Telegram thật.
 
@@ -51,6 +54,7 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 /sku <mã hoặc tên mẫu>
 /orders [YYYY-MM hoặc YYYY-MM-DD]
 /reminders
+ảnh + caption: đây là mã SKU VAY01
 ```
 
 ## Đăng ký webhook

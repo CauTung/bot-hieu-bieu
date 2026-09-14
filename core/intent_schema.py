@@ -10,6 +10,7 @@ class Intent(str, Enum):
     EDIT_SKU = "edit_sku"
     DELETE_SKU = "delete_sku"
     LOOKUP_SKU = "lookup_sku"
+    REGISTER_SKU_IMAGE = "register_sku_image"
     ADD_ORDER = "add_order"
     EDIT_ORDER = "edit_order"
     DELETE_ORDER = "delete_order"
@@ -92,6 +93,7 @@ class IntentDecision(BaseModel):
             Intent.EDIT_SKU: ("sku",),
             Intent.DELETE_SKU: ("sku",),
             Intent.LOOKUP_SKU: (),
+            Intent.REGISTER_SKU_IMAGE: ("sku",),
             Intent.ADD_ORDER: ("sku", "quantity", "order_date"),
             Intent.EDIT_ORDER: ("order_id",),
             Intent.DELETE_ORDER: ("order_id",),

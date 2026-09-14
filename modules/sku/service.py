@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from models.order import Order
 from models.product import Product, normalize_sku
+from models.sku_image_fingerprint import SkuImageFingerprint
 
 
 def create_product(
@@ -89,6 +90,11 @@ def update_product(
     session.add(replacement)
     session.flush()
     session.execute(update(Order).where(Order.sku == normalized).values(sku=target_sku))
+    session.execute(
+        update(SkuImageFingerprint)
+        .where(SkuImageFingerprint.sku == normalized)
+        .values(sku=target_sku)
+    )
     session.delete(product)
     session.flush()
     return replacement

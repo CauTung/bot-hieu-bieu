@@ -77,6 +77,7 @@ class GeminiIntentRouter:
                             "edit_sku",
                             "delete_sku",
                             "lookup_sku",
+                            "register_sku_image",
                             "add_order",
                             "edit_order",
                             "delete_order",

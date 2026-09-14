@@ -20,6 +20,16 @@ class FakeResponse:
             raise ValueError("not json")
         return self._payload
 
+    @property
+    def content(self) -> bytes:
+        return b"image-data"
+
+    def raise_for_status(self) -> None:
+        if not self.is_success:
+            request = httpx.Request("GET", "https://example.test")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError("failed", request=request, response=response)
+
 
 def test_send_message_returns_telegram_result(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(*args: Any, **kwargs: Any) -> FakeResponse:
@@ -77,3 +87,22 @@ def test_invalid_server_response_is_retryable_for_5xx(
     with pytest.raises(TelegramAPIError) as caught:
         TelegramClient("test-token").send_message(123, "Hello")
     assert caught.value.retryable is True
+
+
+def test_download_file_resolves_path_then_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            200, {"ok": True, "result": {"file_path": "photos/a.jpg", "file_size": 10}}
+        ),
+    )
+    seen: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        seen.append(url)
+        return FakeResponse(200, {})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    assert TelegramClient("test-token").download_file("file-id") == b"image-data"
+    assert seen == ["https://api.telegram.org/file/bottest-token/photos/a.jpg"]

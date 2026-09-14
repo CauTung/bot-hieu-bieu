@@ -1,3 +1,4 @@
+import re
 import unicodedata
 import uuid
 from datetime import date, datetime, timezone
@@ -8,8 +9,11 @@ from sqlalchemy.orm import Session
 
 from core.gemini_router import RouterError
 from core.intent_schema import Intent, IntentDecision, IntentParams
+from core.telegram_client import TelegramAPIError
+from models.product import Product
 from modules.order.service import add_order, delete_order, list_orders, total_orders, update_order
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
+from modules.sku.image_service import find_sku_by_image, fingerprint_image, save_image_mapping
 from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import consume_pending_action, create_pending_action
 from services.conversation_history_service import (
@@ -47,6 +51,8 @@ class TelegramPort(Protocol):
 
     def edit_message_reply_markup(self, chat_id: int, message_id: int) -> None: ...
 
+    def download_file(self, file_id: str, *, max_bytes: int = 10_000_000) -> bytes: ...
+
 
 class BotService:
     def __init__(
@@ -77,8 +83,92 @@ class BotService:
     def process(self, context: UpdateContext) -> None:
         if context.callback_query_id:
             self._handle_callback(context)
+        elif (
+            context.photo_file_id
+            and context.photo_file_unique_id
+            and context.chat_id is not None
+            and context.user_id is not None
+        ):
+            self._handle_photo(context)
         elif context.text and context.chat_id is not None and context.user_id is not None:
             self._handle_message(context)
+
+    def _handle_photo(self, context: UpdateContext) -> None:
+        assert context.chat_id is not None and context.user_id is not None
+        assert context.photo_file_id is not None and context.photo_file_unique_id is not None
+        self.telegram.send_chat_action(context.chat_id)
+        now = datetime.now(timezone.utc)
+        sku = self._extract_taught_sku(context.caption or "")
+        conversation = get_conversation_state(
+            self.session, user_id=context.user_id, chat_id=context.chat_id, now=now
+        )
+        if (
+            sku is None
+            and conversation is not None
+            and conversation.intent == Intent.REGISTER_SKU_IMAGE.value
+        ):
+            raw_sku = conversation.params.get("sku")
+            sku = str(raw_sku) if raw_sku else None
+        try:
+            image = self.telegram.download_file(context.photo_file_id)
+            fingerprint = fingerprint_image(image)
+        except (ValueError, TelegramAPIError) as exc:
+            self.telegram.send_message(context.chat_id, str(exc))
+            return
+        if sku is not None:
+            normalized = sku.strip().upper()
+            if self.session.get(Product, normalized) is None:
+                self.telegram.send_message(
+                    context.chat_id, f"Không tìm thấy SKU {normalized}. Hãy tạo SKU trước."
+                )
+                return
+            action = create_pending_action(
+                self.session,
+                user_id=context.user_id,
+                chat_id=context.chat_id,
+                action_type=Intent.REGISTER_SKU_IMAGE.value,
+                payload={
+                    "sku": normalized,
+                    "telegram_file_unique_id": context.photo_file_unique_id,
+                    "sha256": fingerprint.sha256,
+                    "perceptual_hash": fingerprint.perceptual_hash,
+                },
+                ttl_minutes=self.action_ttl_minutes,
+            )
+            clear_conversation_state(
+                self.session, user_id=context.user_id, chat_id=context.chat_id
+            )
+            keyboard = {
+                "inline_keyboard": [[
+                    {"text": "✅ Đúng", "callback_data": f"confirm:{action.id}"},
+                    {"text": "❌ Không", "callback_data": f"cancel:{action.id}"},
+                ]]
+            }
+            self.telegram.send_message(
+                context.chat_id,
+                f"Gắn ảnh này với SKU {normalized}?",
+                reply_markup=keyboard,
+            )
+            return
+        matched_sku, match_type = find_sku_by_image(
+            self.session,
+            telegram_file_unique_id=context.photo_file_unique_id,
+            fingerprint=fingerprint,
+        )
+        if matched_sku:
+            qualifier = "" if match_type == "exact" else " (ảnh tương tự)"
+            self.telegram.send_message(context.chat_id, f"Đây là mã SKU {matched_sku}{qualifier}.")
+        elif match_type == "ambiguous":
+            self.telegram.send_message(
+                context.chat_id,
+                "Ảnh này giống nhiều SKU nên mình chưa thể xác định chính xác.",
+            )
+        else:
+            self.telegram.send_message(
+                context.chat_id,
+                "Mình chưa nhận ra ảnh này. Hãy gửi ảnh kèm chú thích "
+                "“đây là mã SKU VAY01” để dạy bot.",
+            )
 
     def _handle_message(self, context: UpdateContext) -> None:
         assert context.text is not None and context.chat_id is not None
@@ -145,6 +235,21 @@ class BotService:
                     now=now,
                 )
             self._send_and_record(context, question, decision)
+            return
+
+        if decision.intent == Intent.REGISTER_SKU_IMAGE:
+            waiting = decision.model_copy(
+                update={"clarification_question": "Bạn gửi ảnh của SKU này nhé."}
+            )
+            save_conversation_state(
+                self.session,
+                user_id=context.user_id,
+                chat_id=context.chat_id,
+                decision=waiting,
+                ttl_minutes=self.conversation_ttl_minutes,
+                now=now,
+            )
+            self._send_and_record(context, "Bạn gửi ảnh của SKU này nhé.", waiting)
             return
 
         if decision.intent == Intent.CREATE_REMINDER and decision.params.remind_at:
@@ -350,6 +455,17 @@ class BotService:
                 user_id=user_id,
             )
             return "Đã hủy nhắc việc." if cancelled else "Không tìm thấy nhắc việc có thể hủy."
+        if action_type == Intent.REGISTER_SKU_IMAGE.value:
+            mapping = save_image_mapping(
+                self.session,
+                sku=str(payload["sku"]),
+                telegram_file_unique_id=str(payload["telegram_file_unique_id"]),
+                sha256=str(payload["sha256"]),
+                perceptual_hash=str(payload["perceptual_hash"]),
+                user_id=user_id,
+                chat_id=chat_id,
+            )
+            return f"Đã ghi nhớ ảnh cho SKU {mapping.sku}. Lần sau chỉ cần gửi ảnh để tra mã."
         raise ValueError("Loại hành động không được hỗ trợ")
 
     def _handle_read(self, context: UpdateContext, decision: IntentDecision, now: datetime) -> None:
@@ -455,6 +571,7 @@ class BotService:
             "• /sku <mã hoặc tên> — tìm SKU\n"
             "• /orders [YYYY-MM hoặc YYYY-MM-DD] — xem tổng đơn\n"
             "• /reminders — xem nhắc việc đang chờ\n"
+            "• Gửi ảnh kèm 'đây là mã SKU VAY01' — dạy bot nhận diện ảnh\n"
             "Bạn cũng có thể nhập yêu cầu tự nhiên để bot hỗ trợ.",
         )
         return True
@@ -480,6 +597,14 @@ class BotService:
             reminder_id=None,
             question=None,
         )
+        taught_sku = BotService._extract_taught_sku(stripped)
+        if taught_sku:
+            return IntentDecision(
+                intent=Intent.REGISTER_SKU_IMAGE,
+                params=empty.model_copy(update={"sku": taught_sku}),
+                confidence=1,
+                clarification_question=None,
+            )
         if command == "/sku":
             query = argument.strip()
             if not query:
@@ -518,6 +643,19 @@ class BotService:
                 clarification_question=None,
             )
         return None
+
+    @staticmethod
+    def _extract_taught_sku(text: str) -> str | None:
+        normalized = "".join(
+            char
+            for char in unicodedata.normalize("NFD", text.lower())
+            if unicodedata.category(char) != "Mn"
+        )
+        match = re.search(
+            r"(?:day\s+la|anh\s+(?:nay\s+)?la|ma)\s+(?:ma\s+)?sku\s*[:#-]?\s*([a-z0-9][a-z0-9._-]{0,99})\b",
+            normalized,
+        )
+        return match.group(1).upper() if match else None
 
     @staticmethod
     def _confirmation_summary(decision: IntentDecision) -> str:

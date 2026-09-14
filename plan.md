@@ -5,7 +5,7 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 ## Trạng thái triển khai
 
 - Đã code: schema/migration, webhook security, allowlist, deduplicate update, Gemini router,
-  confirmation state, SKU, order, reminder worker, QA và test tự động.
+  confirmation state, SKU, nhận diện SKU bằng ảnh, order, reminder worker, QA và test tự động.
 - Production đang chạy trên Vercel với Supabase, Telegram và Gemini API.
 - Allowlist Telegram đang tạm tắt theo cấu hình `TELEGRAM_ENFORCE_ALLOWLIST=false`; bot hiện cho
   phép mọi Telegram user gửi yêu cầu và cần bật lại sau giai đoạn thử nghiệm.
@@ -128,6 +128,25 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 - Telegram lỗi không làm reminder thành `sent`; cron sau retry được.
 - Worker chết ở `processing` thì reminder được reclaim.
 - Reminder hợp lệ được gửi trễ không quá 5 phút; reminder hủy không được gửi.
+
+### Giai đoạn 3.1: Ghi nhớ và tra SKU bằng ảnh
+
+**Mục tiêu:** Người dùng dạy bot một ảnh thuộc SKU nào và tra lại chỉ bằng ảnh.
+
+**Đã triển khai:**
+
+- Nhận ảnh Telegram cùng caption `đây là mã SKU <mã>` hoặc nhận câu này trước, chờ ảnh tối đa
+  30 phút theo đúng `user_id + chat_id`.
+- Chỉ lưu ánh xạ sau khi người dùng bấm xác nhận; SKU phải tồn tại.
+- Lưu `file_unique_id`, SHA-256 và perceptual hash trong PostgreSQL; dữ liệu không phụ thuộc lịch
+  sử hội thoại và tồn tại cho đến khi bị thay thế hoặc SKU bị xóa.
+- Tra chính xác trước, sau đó mới thử ảnh tương tự với ngưỡng chặt. Kết quả mơ hồ hoặc quá khác
+  sẽ bị từ chối thay vì đoán SKU.
+- Khi đổi mã SKU, ánh xạ ảnh được chuyển sang mã mới; khi xóa SKU, ánh xạ ảnh bị xóa theo.
+- Luồng tra ảnh chạy bằng code, không gọi Gemini và không tiêu quota AI.
+
+**Cần xác minh production:** gửi ảnh thật cho bot sau deployment, xác nhận lưu, rồi gửi lại ảnh
+để kiểm tra round-trip Telegram → Vercel → Supabase.
 
 ### Giai đoạn 5: Hỏi đáp tự do và tối ưu quota
 

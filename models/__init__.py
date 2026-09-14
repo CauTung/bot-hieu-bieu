@@ -6,6 +6,7 @@ from models.pending_action import PendingAction
 from models.processed_update import ProcessedUpdate
 from models.product import Product
 from models.reminder import Reminder
+from models.sku_image_fingerprint import SkuImageFingerprint
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "ProcessedUpdate",
     "Product",
     "Reminder",
+    "SkuImageFingerprint",
 ]

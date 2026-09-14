@@ -71,7 +71,7 @@ def test_update_product_renames_sku_and_moves_orders() -> None:
     result = update_product(session, sku="OLD", new_sku="new")
 
     assert result.sku == "NEW"
-    session.execute.assert_called_once()
+    assert session.execute.call_count == 2
     session.delete.assert_called_once_with(product)
 
 

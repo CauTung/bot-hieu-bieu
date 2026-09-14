@@ -17,6 +17,9 @@ class UpdateContext:
     callback_query_id: str | None
     callback_data: str | None
     message_id: int | None
+    photo_file_id: str | None = None
+    photo_file_unique_id: str | None = None
+    caption: str | None = None
 
 
 def parse_update(payload: dict[str, Any]) -> UpdateContext:
@@ -28,6 +31,15 @@ def parse_update(payload: dict[str, Any]) -> UpdateContext:
     if isinstance(message, dict):
         sender = message.get("from")
         chat = message.get("chat")
+        photos = message.get("photo")
+        largest_photo = None
+        if isinstance(photos, list):
+            valid_photos = [photo for photo in photos if isinstance(photo, dict)]
+            if valid_photos:
+                largest_photo = max(
+                    valid_photos,
+                    key=lambda photo: int(photo.get("width", 0)) * int(photo.get("height", 0)),
+                )
         return UpdateContext(
             update_id=update_id,
             user_id=sender.get("id") if isinstance(sender, dict) else None,
@@ -37,6 +49,21 @@ def parse_update(payload: dict[str, Any]) -> UpdateContext:
             callback_data=None,
             message_id=message.get("message_id")
             if isinstance(message.get("message_id"), int)
+            else None,
+            photo_file_id=(
+                largest_photo.get("file_id")
+                if isinstance(largest_photo, dict)
+                and isinstance(largest_photo.get("file_id"), str)
+                else None
+            ),
+            photo_file_unique_id=(
+                largest_photo.get("file_unique_id")
+                if isinstance(largest_photo, dict)
+                and isinstance(largest_photo.get("file_unique_id"), str)
+                else None
+            ),
+            caption=message.get("caption")
+            if isinstance(message.get("caption"), str)
             else None,
         )
 
