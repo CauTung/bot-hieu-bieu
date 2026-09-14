@@ -104,6 +104,10 @@ Sau khi ghi thành công, bot luôn gửi thông báo rõ ràng. Hành động c
 ### 5.4. Nhắc việc
 
 - Thời điểm nhắc phải ở tương lai sau khi xác nhận.
+- Tách `event_at` (giờ diễn ra) khỏi `remind_at` (giờ gửi thông báo). Nếu chỉ nêu giờ diễn ra,
+  mặc định `remind_at = event_at - 2 giờ`; nếu người dùng nói rõ lúc cần nhắc hoặc khoảng tương
+  đối như “2 tiếng nữa nhắc tôi”, dùng đúng thời điểm đó và không trừ thêm.
+- Màn hình xác nhận và danh sách reminder phải hiển thị rõ cả hai mốc khi có `event_at`.
 - Có thể liệt kê và hủy reminder chưa gửi.
 - SLA MVP: gửi đúng hạn hoặc trễ không quá 5 phút, phụ thuộc cron ngoài.
 - Gửi phải retry được; không đánh dấu `sent` trước khi Telegram xác nhận thành công.
@@ -140,6 +144,7 @@ reminders
 - chat_id BIGINT NOT NULL
 - content TEXT NOT NULL
 - remind_at TIMESTAMPTZ NOT NULL
+- event_at TIMESTAMPTZ NULL
 - status TEXT NOT NULL  # pending, processing, sent, cancelled, failed
 - attempt_count INTEGER NOT NULL DEFAULT 0
 - locked_at TIMESTAMPTZ NULL

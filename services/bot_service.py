@@ -1,7 +1,7 @@
 import re
 import unicodedata
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -252,7 +252,27 @@ class BotService:
             self._send_and_record(context, "Bạn gửi ảnh của SKU này nhé.", waiting)
             return
 
-        if decision.intent == Intent.CREATE_REMINDER and decision.params.remind_at:
+        if decision.intent == Intent.CREATE_REMINDER:
+            if decision.params.event_at:
+                event_at = datetime.fromisoformat(decision.params.event_at)
+                if event_at.astimezone(timezone.utc) <= now:
+                    incomplete = decision.model_copy(deep=True)
+                    incomplete.params.event_at = None
+                    incomplete.clarification_question = (
+                        "Thời gian sự kiện đó đã qua. Sự kiện diễn ra vào lúc nào?"
+                    )
+                    save_conversation_state(
+                        self.session,
+                        user_id=context.user_id,
+                        chat_id=context.chat_id,
+                        decision=incomplete,
+                        ttl_minutes=self.conversation_ttl_minutes,
+                        now=now,
+                    )
+                    self._send_and_record(context, incomplete.clarification_question, incomplete)
+                    return
+            decision = self._prepare_reminder_times(decision, now)
+            assert decision.params.remind_at is not None
             remind_at = datetime.fromisoformat(decision.params.remind_at)
             if remind_at.astimezone(timezone.utc) <= now:
                 incomplete = decision.model_copy(deep=True)
@@ -445,8 +465,19 @@ class BotService:
                 chat_id=chat_id,
                 content=str(payload["content"]),
                 remind_at=datetime.fromisoformat(str(payload["remind_at"])),
+                event_at=(
+                    datetime.fromisoformat(str(payload["event_at"]))
+                    if payload.get("event_at")
+                    else None
+                ),
             )
             local_time = reminder.remind_at.astimezone(ZoneInfo(self.timezone_name))
+            if reminder.event_at is not None:
+                event_time = reminder.event_at.astimezone(ZoneInfo(self.timezone_name))
+                return (
+                    f"Đã đặt nhắc lúc {local_time:%H:%M %d/%m/%Y} cho sự kiện "
+                    f"lúc {event_time:%H:%M %d/%m/%Y}: {reminder.content}"
+                )
             return f"Đã đặt nhắc lúc {local_time:%H:%M %d/%m/%Y}: {reminder.content}"
         if action_type == Intent.CANCEL_REMINDER.value:
             cancelled = cancel_reminder(
@@ -507,10 +538,18 @@ class BotService:
                 self._send_and_record(context, "Bạn không có nhắc việc đang chờ.", decision)
                 return
             zone = ZoneInfo(self.timezone_name)
-            text = "\n".join(
-                f"• {item.id} — {item.remind_at.astimezone(zone):%H:%M %d/%m/%Y}: {item.content}"
-                for item in reminders
-            )
+            lines = []
+            for item in reminders:
+                remind_time = item.remind_at.astimezone(zone)
+                event_suffix = ""
+                if item.event_at is not None:
+                    event_time = item.event_at.astimezone(zone)
+                    event_suffix = f" (sự kiện {event_time:%H:%M %d/%m/%Y})"
+                lines.append(
+                    f"• {item.id} — nhắc {remind_time:%H:%M %d/%m/%Y}{event_suffix}: "
+                    f"{item.content}"
+                )
+            text = "\n".join(lines)
             self._send_and_record(context, text, decision)
         elif decision.intent == Intent.QA and params.question:
             answer = decision.answer or "Mình chưa có câu trả lời."
@@ -576,8 +615,7 @@ class BotService:
         )
         return True
 
-    @staticmethod
-    def _classify_locally(text: str) -> IntentDecision | None:
+    def _classify_locally(self, text: str) -> IntentDecision | None:
         stripped = text.strip()
         command, _, argument = stripped.partition(" ")
         command = command.lower()
@@ -594,6 +632,7 @@ class BotService:
             period=None,
             content=None,
             remind_at=None,
+            event_at=None,
             reminder_id=None,
             question=None,
         )
@@ -605,6 +644,9 @@ class BotService:
                 confidence=1,
                 clarification_question=None,
             )
+        event_reminder = self._parse_dated_event(stripped, empty)
+        if event_reminder is not None:
+            return event_reminder
         if command == "/sku":
             query = argument.strip()
             if not query:
@@ -643,6 +685,42 @@ class BotService:
                 clarification_question=None,
             )
         return None
+
+    def _parse_dated_event(
+        self, text: str, empty: IntentParams
+    ) -> IntentDecision | None:
+        match = re.fullmatch(
+            r"(?:(?:hẹn|hen)\s+)?(\d{1,2})h(?:(\d{1,2}))?\s+(?:ngày|ngay)\s+"
+            r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?\s+(.+)",
+            text.strip(),
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        hour, minute, day, month, year, content = match.groups()
+        now = datetime.now(ZoneInfo(self.timezone_name))
+        target_year = int(year) if year else now.year
+        try:
+            event_at = datetime(
+                target_year,
+                int(month),
+                int(day),
+                int(hour),
+                int(minute or 0),
+                tzinfo=ZoneInfo(self.timezone_name),
+            )
+            if year is None and event_at <= now:
+                event_at = event_at.replace(year=target_year + 1)
+        except ValueError:
+            return None
+        return IntentDecision(
+            intent=Intent.CREATE_REMINDER,
+            params=empty.model_copy(
+                update={"content": content.strip(), "event_at": event_at.isoformat()}
+            ),
+            confidence=1,
+            clarification_question=None,
+        )
 
     @staticmethod
     def _extract_taught_sku(text: str) -> str | None:
@@ -683,7 +761,23 @@ class BotService:
         if decision.intent == Intent.DELETE_ORDER:
             return f"Xóa order {params.order_id}? Thao tác này không thể hoàn tác."
         if decision.intent == Intent.CREATE_REMINDER:
+            if params.event_at:
+                return (
+                    f"Sự kiện lúc {params.event_at}; bot sẽ nhắc lúc {params.remind_at}: "
+                    f"{params.content}?"
+                )
             return f"Đặt nhắc lúc {params.remind_at}: {params.content}?"
         if decision.intent == Intent.CANCEL_REMINDER:
             return f"Hủy nhắc việc {params.reminder_id}?"
         raise ValueError("Intent không cần xác nhận")
+
+    @staticmethod
+    def _prepare_reminder_times(decision: IntentDecision, now: datetime) -> IntentDecision:
+        prepared = decision.model_copy(deep=True)
+        if prepared.params.event_at and not prepared.params.remind_at:
+            event_at = datetime.fromisoformat(prepared.params.event_at)
+            default_remind_at = event_at - timedelta(hours=2)
+            if default_remind_at.astimezone(timezone.utc) <= now:
+                default_remind_at = now + timedelta(minutes=1)
+            prepared.params.remind_at = default_remind_at.isoformat()
+        return prepared

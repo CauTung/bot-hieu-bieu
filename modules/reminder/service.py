@@ -14,10 +14,13 @@ def create_reminder(
     chat_id: int,
     content: str,
     remind_at: datetime,
+    event_at: datetime | None = None,
 ) -> Reminder:
     now = datetime.now(timezone.utc)
     if remind_at.tzinfo is None:
         raise ValueError("Thời gian nhắc phải có timezone")
+    if event_at is not None and event_at.tzinfo is None:
+        raise ValueError("Thời gian sự kiện phải có timezone")
     remind_at_utc = remind_at.astimezone(timezone.utc)
     if remind_at_utc <= now:
         raise ValueError("Thời gian nhắc phải ở tương lai")
@@ -30,6 +33,7 @@ def create_reminder(
         chat_id=chat_id,
         content=clean_content,
         remind_at=remind_at_utc,
+        event_at=event_at.astimezone(timezone.utc) if event_at is not None else None,
         status="pending",
     )
     session.add(reminder)

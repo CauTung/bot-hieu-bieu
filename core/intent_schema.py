@@ -39,6 +39,7 @@ class IntentParams(BaseModel):
     period: str | None = Field(description="Ngày YYYY-MM-DD, tháng YYYY-MM, hoặc null")
     content: str | None = Field(description="Nội dung nhắc việc")
     remind_at: str | None = Field(description="Thời điểm ISO 8601 có timezone")
+    event_at: str | None = Field(description="Thời điểm diễn ra sự kiện, ISO 8601 có timezone")
     reminder_id: str | None = Field(description="UUID của nhắc việc cần hủy")
     question: str | None = Field(description="Câu hỏi tự do nguyên văn")
 
@@ -78,16 +79,18 @@ class IntentDecision(BaseModel):
                 self.clarification_question = (
                     self.clarification_question or "Bạn cung cấp đúng ID của order cần sửa/xóa nhé."
                 )
-        if self.params.remind_at is not None:
-            try:
-                parsed_reminder = datetime.fromisoformat(self.params.remind_at)
-                if parsed_reminder.tzinfo is None:
-                    raise ValueError("timezone required")
-            except ValueError:
-                self.params.remind_at = None
-                self.clarification_question = (
-                    self.clarification_question or "Bạn muốn được nhắc vào ngày và giờ nào?"
-                )
+        for field_name in ("remind_at", "event_at"):
+            value = getattr(self.params, field_name)
+            if value is not None:
+                try:
+                    parsed = datetime.fromisoformat(value)
+                    if parsed.tzinfo is None:
+                        raise ValueError("timezone required")
+                except ValueError:
+                    setattr(self.params, field_name, None)
+                    self.clarification_question = self.clarification_question or (
+                        "Sự kiện diễn ra hoặc bạn muốn được nhắc vào ngày và giờ nào?"
+                    )
         required: dict[Intent, tuple[str, ...]] = {
             Intent.CREATE_SKU: ("sku", "name"),
             Intent.EDIT_SKU: ("sku",),
@@ -98,7 +101,7 @@ class IntentDecision(BaseModel):
             Intent.EDIT_ORDER: ("order_id",),
             Intent.DELETE_ORDER: ("order_id",),
             Intent.QUERY_ORDERS: (),
-            Intent.CREATE_REMINDER: ("content", "remind_at"),
+            Intent.CREATE_REMINDER: ("content",),
             Intent.CANCEL_REMINDER: ("reminder_id",),
             Intent.QA: ("question",),
         }
@@ -110,6 +113,12 @@ class IntentDecision(BaseModel):
                 "clarification_question is required when intent parameters are missing: "
                 + ", ".join(missing)
             )
+        if (
+            self.intent == Intent.CREATE_REMINDER
+            and not (self.params.remind_at or self.params.event_at)
+            and not self.clarification_question
+        ):
+            raise ValueError("create_reminder requires remind_at or event_at")
         if (
             self.intent == Intent.QA
             and self.params.question

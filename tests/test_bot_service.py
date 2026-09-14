@@ -26,6 +26,7 @@ def params(**overrides: object) -> IntentParams:
         "period": None,
         "content": None,
         "remind_at": None,
+        "event_at": None,
         "reminder_id": None,
         "question": None,
     }

@@ -22,6 +22,12 @@ Với intent khác qa, answer phải là null.
 Khi sửa SKU, sku là mã hiện tại và new_sku là mã mới nếu đổi mã.
 Khi sửa order, order_id là UUID bản ghi; new_sku là SKU mới nếu đổi sản phẩm.
 Không được suy đoán order_id. Sửa và xóa là thao tác riêng, không phân loại thành tạo mới.
+Với reminder, phải phân biệt thời gian sự kiện và thời gian gửi nhắc:
+- "18h ngày 17/9 đi nhậu": event_at là 18h, remind_at null; code sẽ nhắc trước 2 giờ.
+- "2 tiếng nữa nhắc tôi gọi khách" hoặc "nhắc tôi lúc 16h": remind_at là thời điểm nhắc,
+  event_at null; code không được trừ thêm 2 giờ.
+- Nếu người dùng nêu cả sự kiện và "nhắc trước ...", đặt event_at và tính remind_at đúng khoảng
+  báo trước họ yêu cầu.
 Nếu có TRẠNG THÁI HỘI THOẠI, tin nhắn hiện tại là câu trả lời cho câu hỏi làm rõ trước đó.
 Hãy giữ lại các params đã biết, bổ sung thông tin mới và tiếp tục đúng intent đang chờ.
 Chỉ bỏ trạng thái cũ khi người dùng thể hiện rõ họ muốn chuyển sang một yêu cầu khác.
@@ -108,6 +114,7 @@ class GeminiIntentRouter:
                             "period": {"type": "STRING", "nullable": True},
                             "content": {"type": "STRING", "nullable": True},
                             "remind_at": {"type": "STRING", "nullable": True},
+                            "event_at": {"type": "STRING", "nullable": True},
                             "reminder_id": {"type": "STRING", "nullable": True},
                             "question": {"type": "STRING", "nullable": True},
                         },
@@ -124,6 +131,7 @@ class GeminiIntentRouter:
                             "period",
                             "content",
                             "remind_at",
+                            "event_at",
                             "reminder_id",
                             "question",
                         ],

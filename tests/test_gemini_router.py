@@ -45,6 +45,7 @@ def decision_json() -> str:
                 "period": None,
                 "content": None,
                 "remind_at": None,
+                "event_at": None,
                 "reminder_id": None,
                 "question": None,
             },
@@ -84,7 +85,7 @@ def test_router_includes_pending_conversation_context(monkeypatch: pytest.Monkey
         telegram_user_id=123,
         conversation_context={
             "intent": "create_reminder",
-            "params": {"content": "Lịch đi nhậu", "remind_at": None},
+            "params": {"content": "Lịch đi nhậu", "remind_at": None, "event_at": None},
             "clarification_question": "Bạn muốn đặt vào thời gian nào?",
         },
     )
