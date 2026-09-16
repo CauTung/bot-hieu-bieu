@@ -24,6 +24,35 @@ Kế hoạch này triển khai `requirements.md` theo hướng an toàn cho webh
 
 ## 2. Roadmap
 
+### Bổ sung: Báo cáo số đơn nhiều người từ ảnh — đã code, chờ production
+
+**Mục tiêu:** Đáp ứng mục 5.6 của requirements: đọc tên/số đơn từ ảnh, xác nhận ngày trước khi
+lưu và tổng hợp/xếp hạng theo tháng để đối chiếu thành tích.
+
+**Công việc:**
+
+- Thiết kế dữ liệu báo cáo theo người, ngày và phạm vi user/chat riêng với `orders` theo SKU;
+  xác định nhận diện người/biệt danh và xử lý bản ghi trùng người/ngày trước khi viết migration.
+- Thêm luồng đọc ảnh báo cáo, phân biệt với luồng ảnh SKU và validate kết quả bằng code.
+- Giữ danh sách trích xuất trong conversational state khi hỏi lại ngày, tên hoặc số bị mờ.
+- Nếu ảnh/caption không có ngày, đề xuất hôm nay theo UTC+7 bằng ngày cụ thể và yêu cầu xác
+  nhận cùng toàn bộ số liệu; cố định ngày trong pending action kể cả xác nhận qua nửa đêm.
+- Tái sử dụng confirmation có TTL, ràng buộc user/chat và atomic consume; xử lý từ chối/sửa
+  số liệu và trùng người/ngày mà không tự cộng dồn hay ghi đè.
+- Thêm truy vấn ngày/tháng, tổng từng người, xếp hạng có đồng hạng và phạm vi dữ liệu đã nhập.
+- Bổ sung test cho ảnh thiếu/có ngày, ngày mâu thuẫn, sửa ngày, OCR mờ, tên mơ hồ, số 0,
+  retry, trùng người/ngày, cách ly user/chat và biên ngày/tháng UTC+7.
+- Smoke-test ảnh Telegram thật sau triển khai; chưa đánh dấu hoàn thành từ mock OCR đơn thuần.
+
+**Chưa chốt với khách:** công thức thưởng nếu muốn tính tiền tự động. Hiện phạm vi bổ sung chỉ
+tổng hợp và so sánh số đơn để tham khảo thưởng.
+
+**Kết quả local:** đã thêm schema/migration `20260916_0006`, trích xuất ảnh bằng Gemini,
+luồng bản nháp/xác nhận/sửa dòng, chống nút cũ và snapshot revision, thay thế số cũ có xác nhận,
+truy vấn ngày/tháng và đồng hạng. Test dữ liệu dùng SQLite riêng; test Gemini/Telegram dùng mock.
+Chưa xác minh OCR thật, migration trên Supabase, PostgreSQL concurrent locking hoặc Telegram
+round-trip trên deployment. Không coi các bước này đã hoàn tất từ test local.
+
 ### Giai đoạn 1: Foundation, database và webhook an toàn
 
 **Mục tiêu:** Deployment Vercel nhận Telegram webhook an toàn, kết nối DB và xử lý update idempotent.

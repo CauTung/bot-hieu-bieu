@@ -15,6 +15,7 @@ class Intent(str, Enum):
     EDIT_ORDER = "edit_order"
     DELETE_ORDER = "delete_order"
     QUERY_ORDERS = "query_orders"
+    QUERY_REPORTS = "query_reports"
     CREATE_REMINDER = "create_reminder"
     LIST_REMINDERS = "list_reminders"
     CANCEL_REMINDER = "cancel_reminder"

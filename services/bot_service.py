@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 
 from core.gemini_router import RouterError
 from core.intent_schema import Intent, IntentDecision, IntentParams
+from core.report_schema import ReportExtraction
 from core.telegram_client import TelegramAPIError
 from models.product import Product
 from modules.order.service import add_order, delete_order, list_orders, total_orders, update_order
 from modules.reminder.service import cancel_reminder, create_reminder, list_pending_reminders
+from modules.report.service import save_report, scope_lock
 from modules.sku.image_service import find_sku_by_image, fingerprint_image, save_image_mapping
 from modules.sku.service import create_product, delete_product, find_products, update_product
 from services.confirmation_service import consume_pending_action, create_pending_action
@@ -28,10 +30,13 @@ from services.conversation_service import (
 )
 from services.date_ranges import parse_order_period
 from services.reminder_presenter import format_confirmation, format_created, format_list
+from services.report_flow import REPORT_ACTION, ReportFlow
 from services.update_processor import UpdateContext
 
 
 class RouterPort(Protocol):
+    def extract_report(self, image: bytes, caption: str) -> ReportExtraction: ...
+
     def classify(
         self,
         text: str,
@@ -80,6 +85,9 @@ class BotService:
         self.history_retention_days = history_retention_days
         self.history_max_exchanges = history_max_exchanges
         self.max_message_length = max_message_length
+        self.reports = ReportFlow(
+            session, telegram, router, timezone_name, action_ttl_minutes, conversation_ttl_minutes,
+        )
 
     def process(self, context: UpdateContext) -> None:
         if context.callback_query_id:
@@ -100,11 +108,15 @@ class BotService:
         self.telegram.send_chat_action(context.chat_id)
         now = datetime.now(timezone.utc)
         sku = self._extract_taught_sku(context.caption or "")
+        explicit_report = bool(re.search(
+            r"báo cáo|bao cao|số đơn|so don", context.caption or "", flags=re.IGNORECASE,
+        ))
         conversation = get_conversation_state(
             self.session, user_id=context.user_id, chat_id=context.chat_id, now=now
         )
         if (
             sku is None
+            and not explicit_report
             and conversation is not None
             and conversation.intent == Intent.REGISTER_SKU_IMAGE.value
         ):
@@ -156,19 +168,18 @@ class BotService:
             telegram_file_unique_id=context.photo_file_unique_id,
             fingerprint=fingerprint,
         )
-        if matched_sku:
+        if matched_sku and not explicit_report:
             qualifier = "" if match_type == "exact" else " (ảnh tương tự)"
             self.telegram.send_message(context.chat_id, f"Đây là mã SKU {matched_sku}{qualifier}.")
-        elif match_type == "ambiguous":
+        elif match_type == "ambiguous" and not explicit_report:
             self.telegram.send_message(
                 context.chat_id,
                 "Ảnh này giống nhiều SKU nên mình chưa thể xác định chính xác.",
             )
         else:
-            self.telegram.send_message(
-                context.chat_id,
-                "Mình chưa nhận ra ảnh này. Hãy gửi ảnh kèm chú thích "
-                "“đây là mã SKU VAY01” để dạy bot.",
+            self.reports.photo(
+                image, context.caption or "", context.photo_file_unique_id,
+                context.user_id, context.chat_id,
             )
 
     def _handle_message(self, context: UpdateContext) -> None:
@@ -178,9 +189,9 @@ class BotService:
             self.telegram.send_message(context.chat_id, "Tin nhắn quá dài, vui lòng gửi ngắn hơn.")
             return
         if self._handle_static_command(context):
-            clear_conversation_state(
-                self.session, user_id=context.user_id, chat_id=context.chat_id
-            )
+            self.reports.abandon(context.user_id, context.chat_id)
+            return
+        if self.reports.message(context.text, context.user_id, context.chat_id):
             return
         self.telegram.send_chat_action(context.chat_id)
         now = datetime.now(timezone.utc)
@@ -345,6 +356,7 @@ class BotService:
         except ValueError:
             self.telegram.answer_callback_query(context.callback_query_id, "Callback không hợp lệ.")
             return
+        scope_lock(self.session, context.user_id, context.chat_id)
         action = consume_pending_action(
             self.session,
             action_id=action_id,
@@ -360,6 +372,10 @@ class BotService:
         if context.message_id is not None:
             self.telegram.edit_message_reply_markup(context.chat_id, context.message_id)
         if verb == "cancel":
+            if action.action_type == REPORT_ACTION:
+                self.telegram.answer_callback_query(context.callback_query_id, "Chưa lưu số liệu.")
+                self.reports.reject(action.payload, context.user_id, context.chat_id)
+                return
             self.telegram.answer_callback_query(context.callback_query_id, "Đã hủy.")
             self.telegram.send_message(context.chat_id, "Đã hủy yêu cầu.")
             self._record_callback(context, "Đã hủy yêu cầu.", action.action_type, action.payload)
@@ -380,6 +396,10 @@ class BotService:
     def _execute_action(
         self, action_type: str, payload: dict[str, object], user_id: int, chat_id: int
     ) -> str:
+        if action_type == REPORT_ACTION:
+            result = save_report(self.session, payload, user_id, chat_id)
+            clear_conversation_state(self.session, user_id=user_id, chat_id=chat_id)
+            return result
         if action_type == Intent.CREATE_SKU.value:
             raw_tags = payload.get("tags")
             tags = [str(tag) for tag in raw_tags] if isinstance(raw_tags, list) else None
@@ -496,7 +516,9 @@ class BotService:
     def _handle_read(self, context: UpdateContext, decision: IntentDecision, now: datetime) -> None:
         assert context.user_id is not None and context.chat_id is not None
         params = decision.params
-        if decision.intent == Intent.LOOKUP_SKU:
+        if decision.intent == Intent.QUERY_REPORTS:
+            self.reports.query(params.period, context.user_id, context.chat_id)
+        elif decision.intent == Intent.LOOKUP_SKU:
             query = params.sku or params.name or ""
             products = find_products(self.session, query)
             text = "Không tìm thấy SKU phù hợp."
@@ -591,6 +613,8 @@ class BotService:
             "Các lệnh nhanh:\n"
             "• /sku <mã hoặc tên> — tìm SKU\n"
             "• /orders [YYYY-MM hoặc YYYY-MM-DD] — xem tổng đơn\n"
+            "• /reports [YYYY-MM hoặc YYYY-MM-DD] — số đơn/xếp hạng theo người\n"
+            "• Gửi ảnh báo cáo số đơn — xem lại ngày và số liệu trước khi lưu\n"
             "• /reminders — xem nhắc việc đang chờ\n"
             "• Gửi ảnh kèm 'đây là mã SKU VAY01' — dạy bot nhận diện ảnh\n"
             "Bạn cũng có thể nhập yêu cầu tự nhiên để bot hỗ trợ.",

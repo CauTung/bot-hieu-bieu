@@ -9,6 +9,8 @@ Xây một bot Telegram cá nhân cho dev designer 2D, hỗ trợ:
 3. Đặt, xem và hủy nhắc việc theo thời gian người dùng chọn.
 4. Trả lời câu hỏi tự do trong phạm vi công việc, ví dụ mạng xã hội và Photoshop.
 5. Ghi nhớ ảnh mẫu theo SKU và tra mã SKU khi người dùng chỉ gửi ảnh.
+6. Đọc ảnh chụp báo cáo số đơn của nhiều người, xác nhận ngày và số liệu trước khi lưu;
+   tổng hợp theo ngày/tháng và so sánh số đơn giữa các người được báo cáo.
 
 Người dùng thao tác chủ yếu bằng **tin nhắn tự do**. Bot dùng LLM để phân tích ý định nhưng nghiệp vụ, phân quyền, kiểm tra dữ liệu và thao tác database phải do code quyết định.
 
@@ -41,7 +43,9 @@ LLM router dùng Structured Outputs và trả về:
 
 - Intent: `create_sku`, `edit_sku`, `delete_sku`, `lookup_sku`, `add_order`, `edit_order`,
   `delete_order`, `query_orders`, `create_reminder`, `list_reminders`, `cancel_reminder`, `qa`,
-  `register_sku_image`, `unknown`.
+  `register_sku_image`, `query_reports`, `unknown`.
+- Ảnh báo cáo dùng schema trích xuất riêng; action `save_person_report` chỉ được tạo bằng code
+  sau khi kiểm tra ngày và toàn bộ dòng, không lấy payload ghi trực tiếp từ LLM.
 - Schema phải khai báo chặt kiểu dữ liệu và trường bắt buộc theo từng intent.
 - `confidence` chỉ là một tín hiệu. Code phải validate lại toàn bộ `params`.
 - Nếu confidence dưới ngưỡng cấu hình hoặc thiếu/mơ hồ tham số, bot hỏi lại; không đoán bừa.
@@ -118,6 +122,53 @@ Sau khi ghi thành công, bot luôn gửi thông báo rõ ràng. Hành động c
 - Không đưa nội dung QA vào mutation nếu chưa phân loại lại và xác nhận.
 - Giới hạn độ dài input/output và timeout để kiểm soát chi phí.
 
+### 5.6. Báo cáo số đơn nhiều người từ ảnh (đã code, chưa xác minh production)
+
+- Nhận ảnh chụp hội thoại/bảng số liệu và caption, trích xuất từng cặp tên người + số đơn.
+  Đây là số đơn theo người, không phải số lượng sản phẩm theo SKU ở mục 5.2; không yêu cầu
+  tạo SKU và không tự ghi vào bảng `orders` hiện tại.
+- Phân biệt ảnh báo cáo với ảnh tra/gắn SKU; nếu chưa rõ mục đích thì hỏi lại người gửi.
+- Ngày báo cáo lấy từ nội dung ảnh hoặc caption rõ ràng. Nếu không có ngày, bắt buộc hỏi:
+  “Đây là số đơn hôm nay, ngày DD/MM/YYYY, đúng không?” theo `Asia/Ho_Chi_Minh`.
+  Giờ tin nhắn như `5:24 PM` không đủ để xác định ngày báo cáo; ngày nhận ảnh chỉ là ngày
+  đề xuất, không phải ngày đã được người dùng xác nhận.
+- Có thể gộp câu hỏi ngày với bản xem trước toàn bộ tên/số đơn và nút `✅ Đúng` / `❌ Không`.
+  Chỉ lưu sau khi xác nhận cả ngày và số liệu. Nếu chọn Không, hỏi ngày hoặc dòng cần sửa,
+  giữ dữ liệu đã đọc và gửi lại bản xem trước sau khi sửa.
+- Ngày đề xuất được cố định trong payload xác nhận: bấm xác nhận sau nửa đêm không được
+  tự chuyển sang ngày mới. Ngày thiếu năm, mơ hồ hoặc mâu thuẫn giữa ảnh và caption phải hỏi lại.
+- Dòng mờ, thiếu số hoặc tên không chắc phải được làm rõ trước khi lưu; không đoán số và
+  không tự gộp hai người chỉ vì tên gần giống. Số đơn là số nguyên không âm.
+- Lưu người được báo cáo riêng với Telegram user gửi ảnh. Giữ phạm vi dữ liệu theo user/chat;
+  tên người trong ảnh không tự trở thành tài khoản Telegram hay dữ liệu dùng chung toàn bot.
+- Báo cáo ngày liệt kê từng người và tổng số đơn. Báo cáo tháng cộng số đơn đã lưu của từng
+  người, xếp hạng giảm dần và thể hiện đồng hạng khi bằng nhau; nêu rõ phạm vi ngày có dữ liệu,
+  không coi ngày chưa nhập là số 0 hoặc khẳng định đã đủ dữ liệu cả tháng.
+- Callback/update retry không được ghi trùng. Nếu gửi lại số liệu của cùng người/ngày, bot phải
+  hiển thị số cũ và số mới để hỏi cách xử lý, không tự cộng dồn hoặc ghi đè.
+- Mục đích là đối chiếu thành tích để tham khảo thưởng. Chưa tự tính tiền thưởng khi khách
+  chưa cung cấp công thức, mức thưởng và quy tắc áp dụng.
+
+**Ví dụ xác nhận:**
+
+```text
+Mình đọc được số đơn:
+Hiếu: 90
+Nhung: 87
+Huyền: 97
+Đây là số đơn hôm nay, ngày DD/MM/YYYY, đúng không?
+Bạn kiểm tra cả tên và số đơn trước khi xác nhận nhé.
+[✅ Đúng] [❌ Không]
+```
+
+**Nghiệm thu bổ sung:** ảnh thiếu ngày không tạo bản ghi trước khi xác nhận; sửa ngày giữ lại
+danh sách đã đọc; ảnh có ngày rõ hiển thị đúng ngày trong bản xác nhận; dòng mờ/tên trùng được
+hỏi lại; retry không ghi trùng; báo cáo tháng đúng biên UTC+7 và không lẫn với order theo SKU.
+Ảnh tối đa 30 dòng; ảnh dài hơn cần chia nhỏ. Dùng `/ngay DD/MM/YYYY`, `/sua 2 Tên: số đơn`,
+`/xoadong 2`, `/xacnhan` và `/huy` để chỉnh bản nháp. `/reports [YYYY-MM hoặc YYYY-MM-DD]`
+(alias `/baocao`) đọc báo cáo; không nêu kỳ thì lấy tháng hiện tại. Tên được chuẩn hóa Unicode,
+chữ hoa/thường và khoảng trắng; không tự bỏ dấu hoặc ánh xạ biệt danh.
+
 ## 6. Data model tối thiểu
 
 ```text
@@ -153,6 +204,19 @@ reminders
 - last_error TEXT NULL
 - created_at TIMESTAMPTZ NOT NULL
 - updated_at TIMESTAMPTZ NOT NULL
+
+person_reports
+- id UUID PK
+- telegram_user_id BIGINT NOT NULL  # người nhập
+- chat_id BIGINT NOT NULL
+- report_date DATE NOT NULL
+- person_key VARCHAR(160) NOT NULL  # tên chuẩn hóa, giữ dấu
+- person_name VARCHAR(80) NOT NULL  # người được báo cáo
+- count INTEGER NOT NULL CHECK (count >= 0)
+- source VARCHAR(200) NOT NULL  # Telegram file_unique_id
+- revision INTEGER NOT NULL  # kiểm tra dữ liệu đổi sau khi xem trước
+- updated_at TIMESTAMPTZ NOT NULL
+- UNIQUE (telegram_user_id, chat_id, report_date, person_key)
 
 pending_actions
 - id UUID PK

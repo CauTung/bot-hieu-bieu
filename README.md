@@ -57,9 +57,32 @@ Vercel không kết nối được trực tiếp bằng IPv6. Giữ query parame
 /help
 /sku <mã hoặc tên mẫu>
 /orders [YYYY-MM hoặc YYYY-MM-DD]
+/reports [YYYY-MM hoặc YYYY-MM-DD]
 /reminders
 ảnh + caption: đây là mã SKU VAY01
 ```
+
+## Nhập số đơn theo người từ ảnh
+
+Gửi ảnh chụp danh sách tên/số đơn (tối đa 30 dòng), có thể kèm ngày trong caption. Bot dùng
+Gemini để đọc ảnh chưa nhận diện là SKU; ảnh SKU đã biết vẫn được tra như trước. Có thể thêm
+caption `báo cáo số đơn` để chọn rõ luồng báo cáo.
+
+- Thiếu ngày trong ảnh và caption: bot đề xuất hôm nay theo UTC+7, hiển thị ngày cụ thể và
+  toàn bộ số liệu. Chưa lưu cho đến khi bấm **✅ Đúng**.
+- Bấm **❌ Không** để sửa: `/ngay 15/09/2026`, `/sua 2 Huyền: 97`, `/xoadong 2`.
+  `/xacnhan` hiện lại bản xem trước; `/huy` bỏ bản nháp. Dòng mờ hoặc tên trùng phải sửa trước.
+- Nếu cùng người/ngày đã có dữ liệu, bản xem trước hiển thị số cũ → số mới. Xác nhận thay thế
+  các dòng hiển thị, không cộng dồn và không xóa những người không có trong ảnh mới.
+- `/reports 2026-09-16` xem ngày; `/reports 2026-09` xem tháng/xếp hạng; `/reports` xem tháng
+  hiện tại. Alias `/baocao` có cùng cú pháp. Có thể hỏi tự nhiên “ai nhiều đơn nhất tháng này?”.
+- Dữ liệu tách theo Telegram user và chat; tên giữ nguyên dấu, không tự gộp biệt danh. Cần dùng
+  tên thống nhất qua các ngày. Báo cáo hiển thị số ngày có dữ liệu và đồng hạng, chưa tính tiền thưởng.
+
+Tính năng này **đã kiểm tra local, chưa deploy/smoke-test production**. Trước khi deploy phiên bản
+mới, chạy `python -m alembic upgrade head` trên database đích để thêm bảng `person_reports`
+(migration `20260916_0006`). Dùng cấu hình Gemini hiện có với model hỗ trợ đọc ảnh. Kiểm tra ảnh
+thật thiếu ngày → sửa ngày → xác nhận → `/reports`, ảnh trùng người/ngày và callback bấm lại.
 
 ## Đăng ký webhook
 
