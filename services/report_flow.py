@@ -35,15 +35,21 @@ def explicit_date(text: str, today: date) -> date | None:
         return today
     if stripped in {"hôm qua", "hom qua"}:
         return today - timedelta(days=1)
-    for pattern, fmt in (
-        (r"\d{4}-\d{2}-\d{2}", "%Y-%m-%d"),
-        (r"\d{1,2}/\d{1,2}/\d{4}", "%d/%m/%Y"),
-        (r"\d{1,2}-\d{1,2}-\d{4}", "%d-%m-%Y"),
-        (r"\d{1,2}\.\d{1,2}\.\d{4}", "%d.%m.%Y"),
+    for pattern, fmt, has_year in (
+        (r"\d{4}-\d{2}-\d{2}", "%Y-%m-%d", True),
+        (r"\d{1,2}/\d{1,2}/\d{4}", "%d/%m/%Y", True),
+        (r"\d{1,2}-\d{1,2}-\d{4}", "%d-%m-%Y", True),
+        (r"\d{1,2}\.\d{1,2}\.\d{4}", "%d.%m.%Y", True),
+        (r"\d{1,2}/\d{1,2}", "%d/%m", False),
+        (r"\d{1,2}-\d{1,2}", "%d-%m", False),
+        (r"\d{1,2}\.\d{1,2}", "%d.%m", False),
     ):
         if re.fullmatch(pattern, stripped):
             try:
-                return datetime.strptime(stripped, fmt).date()
+                parsed = datetime.strptime(stripped, fmt).date()
+                if not has_year:
+                    parsed = parsed.replace(year=today.year)
+                return parsed
             except ValueError:
                 return None
     return None
