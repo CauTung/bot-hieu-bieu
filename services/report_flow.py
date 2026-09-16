@@ -3,15 +3,16 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import update
+import unicodedata
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from core.gemini_router import RouterError
 from core.report_schema import ReportDraft, ReportExtraction, ReportRow
 from models.conversation_state import ConversationState
 from models.pending_action import PendingAction
-from modules.report.service import report_summary, scope_lock, snapshot
-from services.confirmation_service import create_pending_action
+from modules.report.service import report_summary, save_report, scope_lock, snapshot
+from services.confirmation_service import consume_pending_action, create_pending_action
 from services.conversation_service import clear_conversation_state, get_conversation_state
 from services.date_ranges import parse_order_period
 
@@ -199,6 +200,33 @@ class ReportFlow:
         }:
             self.abandon(user_id, chat_id)
             return False
+
+        normalized_text = "".join(
+            char for char in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(char) != "Mn"
+        )
+        if re.search(r"^(dung|dung roi|ok|oke|chuan|yes|xac nhan)$", normalized_text.strip()):
+            action = self.session.scalar(select(PendingAction).where(
+                PendingAction.telegram_user_id == user_id,
+                PendingAction.chat_id == chat_id,
+                PendingAction.action_type == REPORT_ACTION,
+                PendingAction.status == "pending"
+            ).order_by(PendingAction.created_at.desc()).limit(1))
+            if action:
+                scope_lock(self.session, user_id, chat_id)
+                action = consume_pending_action(
+                    self.session, action_id=action.id, user_id=user_id, chat_id=chat_id, confirm=True
+                )
+                if action:
+                    try:
+                        result = save_report(self.session, action.payload, user_id, chat_id)
+                        clear_conversation_state(self.session, user_id=user_id, chat_id=chat_id)
+                        self.telegram.send_message(chat_id, result)
+                    except ValueError as exc:
+                        self.telegram.send_message(chat_id, str(exc))
+                else:
+                    self.telegram.send_message(chat_id, "Yêu cầu đã hết hạn hoặc đã được xử lý.")
+                return True
+
         scope_lock(self.session, user_id, chat_id)
         # Any edit invalidates old buttons, including an invalid edit awaiting clarification.
         self._invalidate(user_id, chat_id)
@@ -208,7 +236,12 @@ class ReportFlow:
             return True
         draft = ReportDraft.model_validate(state.params)
         today = datetime.now(ZoneInfo(self.timezone_name)).date()
-        selected = explicit_date(argument if command == "/ngay" else text, today)
+        
+        if command == "/ngay":
+            selected = explicit_date(argument, today)
+        else:
+            selected, _ = caption_date(text, today)
+            
         try:
             if selected:
                 draft.report_date = selected

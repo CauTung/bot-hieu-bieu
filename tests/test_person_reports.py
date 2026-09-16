@@ -70,12 +70,8 @@ def test_reject_invalid_counts(count):
         ReportRow(name="Huyền", count=count, uncertain=False)
 
 
-def test_uncertain_or_duplicate_rows_cannot_be_saved(session):
+def test_duplicate_rows_cannot_be_saved(session):
     report = draft(Hiếu=90)
-    report.rows[0].uncertain = True
-    with pytest.raises(ValueError, match="chưa rõ"):
-        persist(session, report)
-    report.rows[0].uncertain = False
     report.rows.append(ReportRow(name="HIẾU", count=20, uncertain=False))
     with pytest.raises(ValueError, match="trùng"):
         persist(session, report)

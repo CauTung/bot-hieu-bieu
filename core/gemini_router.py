@@ -16,7 +16,8 @@ class RouterError(RuntimeError):
 
 ROUTER_INSTRUCTIONS = """Bạn phân loại tin nhắn tiếng Việt cho bot quản lý công việc.
 Tra cứu tổng số đơn theo người, bảng xếp hạng, so sánh thành tích dùng query_reports.
-query_orders chỉ dành cho đơn theo SKU. query_reports dùng period YYYY-MM hoặc YYYY-MM-DD.
+query_orders dùng cho đơn theo SKU, tổng đơn, hoặc hỏi xem đã có thông tin đơn chưa (VD: "hôm nay có đơn chưa").
+query_reports dùng period YYYY-MM hoặc YYYY-MM-DD.
 Chỉ trích xuất dữ liệu người dùng đã nói. Không tự bịa SKU, số lượng hoặc thời gian.
 Ngày giờ phải dùng ISO 8601. Nếu ngày/giờ mơ hồ, để giá trị null và đặt câu hỏi làm rõ.
 Các trường params không dùng cho intent phải là null. Confidence nằm trong khoảng 0 đến 1.

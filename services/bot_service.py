@@ -543,10 +543,13 @@ class BotService:
                 for item in orders
             )
             suffix = f"\nCác order gần nhất:\n{details}" if details else ""
-            text = (
-                f"Tổng số lượng từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}: {total}."
-                f"{suffix}"
-            )
+            if total == 0:
+                text = f"Chưa có thông tin đơn hàng nào từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}."
+            else:
+                text = (
+                    f"Tổng số lượng từ {start:%d/%m/%Y} đến trước {end:%d/%m/%Y}: {total}."
+                    f"{suffix}"
+                )
             self._send_and_record(context, text, decision)
         elif decision.intent == Intent.LIST_REMINDERS:
             reminders = list_pending_reminders(self.session, user_id=context.user_id)

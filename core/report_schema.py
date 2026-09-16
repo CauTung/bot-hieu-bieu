@@ -44,7 +44,7 @@ class ReportDraft(BaseModel):
             return "Ngày chưa rõ. Gửi /ngay DD/MM/YYYY để chọn ngày báo cáo."
         keys: set[str] = set()
         for index, row in enumerate(self.rows, 1):
-            if not row.name or row.count is None or row.uncertain:
+            if not row.name or row.count is None:
                 return f"Dòng {index} chưa rõ. Gửi /sua {index} Tên: số đơn để sửa."
             key = person_key(row.name)
             if key in keys:
