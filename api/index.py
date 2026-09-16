@@ -155,3 +155,48 @@ async def check_reminders(request: Request, authorization: str = Header(None)) -
         "retried": retried,
         "failed": failed,
     }), media_type="application/json")
+
+
+@app.api_route("/api/distill-knowledge", methods=["GET", "POST"])
+async def distill_knowledge(request: Request, authorization: str = Header(None)) -> Response:
+    try:
+        settings = get_settings()
+    except ValidationError as exc:
+        log_event("configuration_error", errors=exc.error_count())
+        return Response(status_code=500, content=json.dumps({"ok": False, "error": "Server configuration error"}), media_type="application/json")
+        
+    expected = f"Bearer {settings.reminder_cron_secret}"
+    if not secrets_match(authorization, expected):
+        return Response(status_code=401, content=json.dumps({"ok": False, "error": "Unauthorized"}), media_type="application/json")
+
+    try:
+        from modules.knowledge.distill import distill_exchanges
+        from google import genai
+        from datetime import datetime, timezone, timedelta
+        
+        client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options={"timeout": 60}
+        )
+        
+        # Distill knowledge from the last 24 hours
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        
+        with session_scope() as session:
+            count = distill_exchanges(
+                session=session,
+                client=client,
+                model=settings.gemini_router_model,
+                since=since
+            )
+            
+        log_event("distill_completed", rules_extracted=count)
+        return Response(status_code=200, content=json.dumps({
+            "ok": True,
+            "rules_extracted": count
+        }), media_type="application/json")
+    except Exception as exc:
+        import traceback
+        log_event("distill_failed", error=type(exc).__name__, traceback=traceback.format_exc())
+        return Response(status_code=500, content=json.dumps({"ok": False, "error": "Distillation failed"}), media_type="application/json")
+

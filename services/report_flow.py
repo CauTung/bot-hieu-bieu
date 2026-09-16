@@ -210,6 +210,17 @@ class ReportFlow:
         normalized_text = "".join(
             char for char in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(char) != "Mn"
         )
+        if re.search(r"^(huy|thoi|bo|huy bo)$", normalized_text.strip()):
+            self.abandon(user_id, chat_id)
+            self.telegram.send_message(chat_id, "Đã hủy báo cáo, chưa ghi số liệu.")
+            return True
+
+        if normalized_text.strip() == "khong":
+            state = get_conversation_state(self.session, user_id=user_id, chat_id=chat_id)
+            if state:
+                self.reject(state.params, user_id, chat_id)
+            return True
+
         if re.search(r"^(dung|dung roi|ok|oke|chuan|yes|xac nhan)$", normalized_text.strip()):
             action = self.session.scalar(select(PendingAction).where(
                 PendingAction.telegram_user_id == user_id,

@@ -47,6 +47,8 @@ class RouterPort(Protocol):
         conversation_context: dict[str, object] | None = None,
     ) -> IntentDecision: ...
 
+    def embed_content(self, text: str) -> list[float]: ...
+
 
 class TelegramPort(Protocol):
     def send_message(self, chat_id: int, text: str, **extra: Any) -> dict[str, Any]: ...
@@ -222,6 +224,17 @@ class BotService:
                         "params": conversation.params,
                         "clarification_question": conversation.clarification_question,
                     }
+                
+                # Fetch past knowledge (RAG)
+                try:
+                    query_embedding = self.router.embed_content(context.text)
+                    from modules.knowledge.service import search_knowledge
+                    knowledge = search_knowledge(self.session, query_embedding, limit=3)
+                    if knowledge:
+                        conversation_context["past_knowledge"] = [k.content for k in knowledge]
+                except Exception:
+                    pass # Silently ignore RAG errors to not break core flow
+
                 decision = self.router.classify(
                     context.text,
                     now=now.astimezone(ZoneInfo(self.timezone_name)),
