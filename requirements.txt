@@ -8,4 +8,4 @@ google-genai==0.3.0
 Pillow==11.3.0
 fastapi
 uvicorn
-pgvector==0.3.6
+pgvector==0.5.0
