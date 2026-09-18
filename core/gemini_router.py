@@ -32,6 +32,7 @@ Với reminder, phải phân biệt thời gian sự kiện và thời gian gử
   event_at null; code không được trừ thêm 2 giờ.
 - Nếu người dùng nêu cả sự kiện và "nhắc trước ...", đặt event_at và tính remind_at đúng khoảng
   báo trước họ yêu cầu.
+- Nếu người dùng yêu cầu lặp lại (hằng ngày, hằng tuần, mỗi tháng), điền trường recurrence là "daily", "weekly" hoặc "monthly".
 Nếu có TRẠNG THÁI HỘI THOẠI, tin nhắn hiện tại là câu trả lời cho câu hỏi làm rõ trước đó.
 Hãy giữ lại các params đã biết, bổ sung thông tin mới và tiếp tục đúng intent đang chờ.
 Chỉ bỏ trạng thái cũ khi người dùng thể hiện rõ họ muốn chuyển sang một yêu cầu khác.
@@ -123,6 +124,11 @@ class GeminiIntentRouter:
                             "remind_at": {"type": "STRING", "nullable": True},
                             "event_at": {"type": "STRING", "nullable": True},
                             "reminder_id": {"type": "STRING", "nullable": True},
+                            "recurrence": {
+                                "type": "STRING",
+                                "enum": ["daily", "weekly", "monthly"],
+                                "nullable": True,
+                            },
                             "question": {"type": "STRING", "nullable": True},
                         },
                         "required": [
@@ -140,6 +146,7 @@ class GeminiIntentRouter:
                             "remind_at",
                             "event_at",
                             "reminder_id",
+                            "recurrence",
                             "question",
                         ],
                     },

@@ -20,15 +20,18 @@ def format_datetime(value: datetime, timezone_name: str) -> str:
 
 
 def format_confirmation(
-    *, content: str, remind_at: datetime, event_at: datetime | None, timezone_name: str
+    *, content: str, remind_at: datetime, event_at: datetime | None, recurrence: str | None = None, timezone_name: str
 ) -> str:
     if event_at is None:
-        return (
+        text = (
             "⏰ XÁC NHẬN NHẮC VIỆC\n\n"
             f"📝 {content}\n"
-            f"🔔 {format_datetime(remind_at, timezone_name)}\n\n"
-            "Đúng thời gian này chứ?"
+            f"🔔 {format_datetime(remind_at, timezone_name)}"
         )
+        if recurrence:
+            text += f"\n🔁 Lặp lại: {recurrence}"
+        text += "\n\nĐúng thời gian này chứ?"
+        return text
     lead_minutes = max(0, int((event_at - remind_at).total_seconds() // 60))
     if lead_minutes and lead_minutes % 60 == 0:
         lead_text = f"trước {lead_minutes // 60} giờ"
@@ -36,37 +39,49 @@ def format_confirmation(
         lead_text = f"trước {lead_minutes} phút"
     else:
         lead_text = "khi sự kiện bắt đầu"
-    return (
-        "🗓 XÁC NHẬN LỊCH HẸN\n\n"
-        f"✨ {content}\n"
-        f"📅 Sự kiện: {format_datetime(event_at, timezone_name)}\n"
-        f"🔔 Nhắc: {format_datetime(remind_at, timezone_name)} ({lead_text})\n\n"
-        "Đúng lịch này chứ?"
+    text = (
+        "⏰ XÁC NHẬN LỊCH HẸN\n\n"
+        f"📅 {content}\n"
+        f"📌 Sự kiện: {format_datetime(event_at, timezone_name)}\n"
+        f"🔔 Nhắc: {format_datetime(remind_at, timezone_name)} ({lead_text})"
     )
+    if recurrence:
+        text += f"\n🔁 Lặp lại: {recurrence}"
+    text += "\n\nĐúng lịch này chứ?"
+    return text
 
 
 def format_created(reminder: Reminder, timezone_name: str) -> str:
     if reminder.event_at is None:
-        return (
+        text = (
             "✅ ĐÃ ĐẶT NHẮC\n\n"
             f"📝 {reminder.content}\n"
             f"🔔 {format_datetime(reminder.remind_at, timezone_name)}"
         )
-    return (
+        if reminder.recurrence:
+            text += f"\n🔁 Lặp lại: {reminder.recurrence}"
+        return text
+    
+    text = (
         "✅ ĐÃ LƯU LỊCH HẸN\n\n"
-        f"✨ {reminder.content}\n"
-        f"📅 Sự kiện: {format_datetime(reminder.event_at, timezone_name)}\n"
+        f"📅 {reminder.content}\n"
+        f"📌 Sự kiện: {format_datetime(reminder.event_at, timezone_name)}\n"
         f"🔔 Nhắc: {format_datetime(reminder.remind_at, timezone_name)}"
     )
+    if reminder.recurrence:
+        text += f"\n🔁 Lặp lại: {reminder.recurrence}"
+    return text
 
 
 def format_list(reminders: list[Reminder], timezone_name: str) -> str:
-    blocks = [f"📌 LỊCH SẮP TỚI ({len(reminders)})"]
+    blocks = [f"📋 LỊCH SẮP TỚI ({len(reminders)})"]
     for index, reminder in enumerate(reminders, start=1):
         lines = [f"{index}. {reminder.content}"]
         if reminder.event_at is not None:
-            lines.append(f"   📅 {format_datetime(reminder.event_at, timezone_name)}")
+            lines.append(f"   📌 {format_datetime(reminder.event_at, timezone_name)}")
         lines.append(f"   🔔 Nhắc: {format_datetime(reminder.remind_at, timezone_name)}")
+        if reminder.recurrence:
+            lines.append(f"   🔁 Lặp lại: {reminder.recurrence}")
         lines.append(f"   Mã hủy: {reminder.id}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)

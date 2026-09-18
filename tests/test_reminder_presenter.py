@@ -28,7 +28,7 @@ def test_created_message_is_human_readable() -> None:
 
 def test_list_keeps_technical_id_secondary() -> None:
     text = format_list([reminder()], "Asia/Ho_Chi_Minh")
-    assert text.startswith("📌 LỊCH SẮP TỚI (1)\n\n1. Lịch nhậu")
+    assert text.startswith("📋 LỊCH SẮP TỚI (1)\n\n1. Lịch nhậu")
     assert "Mã hủy: 0658599e-a346-4a7a-9490-659cc05785cd" in text
 
 

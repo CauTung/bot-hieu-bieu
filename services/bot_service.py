@@ -504,6 +504,7 @@ class BotService:
                     if payload.get("event_at")
                     else None
                 ),
+                recurrence=str(payload["recurrence"]) if payload.get("recurrence") else None,
             )
             return format_created(reminder, self.timezone_name)
         if action_type == Intent.CANCEL_REMINDER.value:

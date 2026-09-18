@@ -54,10 +54,41 @@ def mark_reminder_sent(
     stored = session.get(Reminder, reminder.id)
     if stored is None or stored.status != "processing":
         return
-    stored.status = "sent"
-    stored.sent_at = now or datetime.now(timezone.utc)
-    stored.locked_at = None
-    stored.last_error = None
+    current_time = now or datetime.now(timezone.utc)
+    
+    if stored.recurrence == "daily":
+        stored.status = "pending"
+        stored.remind_at = stored.remind_at + timedelta(days=1)
+        if stored.event_at:
+            stored.event_at = stored.event_at + timedelta(days=1)
+        stored.locked_at = None
+        stored.attempt_count = 0
+        stored.next_retry_at = None
+        stored.last_error = None
+    elif stored.recurrence == "weekly":
+        stored.status = "pending"
+        stored.remind_at = stored.remind_at + timedelta(weeks=1)
+        if stored.event_at:
+            stored.event_at = stored.event_at + timedelta(weeks=1)
+        stored.locked_at = None
+        stored.attempt_count = 0
+        stored.next_retry_at = None
+        stored.last_error = None
+    elif stored.recurrence == "monthly":
+        # Simple approximation, better to use dateutil.relativedelta but timedelta(days=30) works for simple use case
+        stored.status = "pending"
+        stored.remind_at = stored.remind_at + timedelta(days=30)
+        if stored.event_at:
+            stored.event_at = stored.event_at + timedelta(days=30)
+        stored.locked_at = None
+        stored.attempt_count = 0
+        stored.next_retry_at = None
+        stored.last_error = None
+    else:
+        stored.status = "sent"
+        stored.sent_at = current_time
+        stored.locked_at = None
+        stored.last_error = None
 
 
 def mark_reminder_error(

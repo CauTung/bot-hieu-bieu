@@ -15,6 +15,7 @@ def create_reminder(
     content: str,
     remind_at: datetime,
     event_at: datetime | None = None,
+    recurrence: str | None = None,
 ) -> Reminder:
     now = datetime.now(timezone.utc)
     if remind_at.tzinfo is None:
@@ -34,6 +35,7 @@ def create_reminder(
         content=clean_content,
         remind_at=remind_at_utc,
         event_at=event_at.astimezone(timezone.utc) if event_at is not None else None,
+        recurrence=recurrence,
         status="pending",
     )
     session.add(reminder)

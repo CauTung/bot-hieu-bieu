@@ -42,6 +42,7 @@ class IntentParams(BaseModel):
     remind_at: str | None = Field(description="Thời điểm ISO 8601 có timezone")
     event_at: str | None = Field(description="Thời điểm diễn ra sự kiện, ISO 8601 có timezone")
     reminder_id: str | None = Field(description="UUID của nhắc việc cần hủy")
+    recurrence: str | None = None
     question: str | None = Field(description="Câu hỏi tự do nguyên văn")
 
 

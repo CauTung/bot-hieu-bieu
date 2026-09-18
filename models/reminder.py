@@ -24,6 +24,7 @@ class Reminder(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
